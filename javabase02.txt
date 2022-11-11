@@ -1,0 +1,522 @@
+    /**
+     * class 05
+     * 注解测试
+     */
+    class AnnotationTest {
+        private final Logger LOGGER = LoggerFactory.getLogger(AnnotationTest.class);
+
+        @Test
+        public void test04() {
+            Class<iPhone> clazz = iPhone.class;
+            System.out.println(clazz.isAnnotationPresent(Phone.CustomDescription.class));
+        }
+
+        /**
+         * getAnnotatedInterfaces(): 获取Class对象对应类实现的所有带注解的接口类型
+         * getAnnotatedSuperclass(): 返回父类的注解的AnnotatedType
+         */
+        @Test
+        public void testGetAnnotatedSuperclass() {
+            Class<iPhone> clazz = iPhone.class;
+            List<String> annotationNames = new ArrayList<>();
+
+            // 获取实现的接口
+            LOGGER.info("getAnnotatedInterfaces()获取实现的接口");
+            AnnotatedType[] annotatedInterfaces = clazz.getAnnotatedInterfaces();
+            for (AnnotatedType annotatedType : annotatedInterfaces) {
+                String interfaceFullName = annotatedType.getType().getTypeName();
+                annotationNames.add(interfaceFullName);
+            }
+            LOGGER.info("{}", annotationNames);
+
+            // 获取父类的class name
+            LOGGER.info("getAnnotatedSuperclass()获取父类的class name");
+            AnnotatedType annotatedSuperclass = clazz.getAnnotatedSuperclass();
+            String fullSuperclassName = annotatedSuperclass.getType().getTypeName();
+            LOGGER.info("{}", fullSuperclassName);
+        }
+
+
+        /**
+         * getDeclareAnnotation(Class<A> annotationClass)、
+         * getDeclaredAnnotations()、
+         * getDeclaredAnnotationsByType(Class<A> annotationClass)
+         * 三个方法均只能获取标注类上的注解，无法获取标注类的父类及祖父类中的注解
+         */
+        @Test
+        public void testGetDeclareAnnotation() {
+            Class<iPhone> clazz = iPhone.class;
+
+            // Declared Annotation
+            LOGGER.info("getDeclareAnnotation(xxx.class)");
+            Phone.CustomDescription declaredAnnotation = clazz.getDeclaredAnnotation(Phone.CustomDescription.class);
+            LOGGER.info("{}", declaredAnnotation);
+
+            LOGGER.info("getDeclaredAnnotations()");
+            Annotation[] declaredAnnotations = clazz.getDeclaredAnnotations();
+            LOGGER.info("{}", Arrays.asList(declaredAnnotations));
+
+            LOGGER.info("getDeclaredAnnotationsByType(xxx.class)");
+            Phone.CustomDescription[] declaredAnnotationsByType =
+                    clazz.getDeclaredAnnotationsByType(Phone.CustomDescription.class);
+            LOGGER.info("{}", Arrays.asList(declaredAnnotationsByType));
+        }
+
+
+        /**
+         * getAnnotation(Class<A> annotationClass)、
+         * getAnnotations()、
+         * getAnnotationsByType(Class<A> annotationClass)
+         * 三个方法均可获取标注类上的注解 + 父类及祖父类上可继承的注解(标注有@Inherited的注解)
+         *
+         * 注：
+         * 1. 父类和子类中存在相同的注解时，子类注解会覆盖父类注解。
+         * 2. getAnnotation(CustomAttribute.class)获取到的是CustomAttributes注解，CustomAttributes中含使用的CustomAttribute注解。
+         * 3. 三个方法均不会获取任何标注在实现接口上的注解。
+         */
+        @Test
+        public void testGetAnnotation() {
+            Class<iPhone> clazz = iPhone.class;
+
+            // 获取标注类(祖父类中可继承的注解)的指定类型注解
+            LOGGER.info("getAnnotation(XXX.class): 获取标注类上指定类型注解，及祖父类中可继承的注解");
+            Phone.CustomDescription description = clazz.getAnnotation(Phone.CustomDescription.class);
+            LOGGER.info("{}", description);
+
+            // 获取标注类(含祖父类中可继承的注解)的所有注解
+            LOGGER.info("getAnnotations(): 获取标注类的所有注解，及祖父类中可继承的注解");
+            Annotation[] annotations = clazz.getAnnotations();
+            LOGGER.info("{}", Arrays.toString(annotations));
+
+            // 获取标注类(含祖父类中可继承的注解)的指定类型的所有注解
+            LOGGER.info("获取标注类的指定注解类型的所有注解，及祖父类中可继承的注解");
+            Phone.CustomDescription[] annotationsByType = clazz.getAnnotationsByType(Phone.CustomDescription.class);
+            LOGGER.info("{}", Arrays.toString(annotationsByType));
+        }
+    }
+}
+
+
+
+public class DateTimeTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DateTimeTest.class);
+
+
+    @Test
+    public void test02() {
+        System.out.println(getCurrentMonthDay());
+        String PayrollPeriod = "202211";
+        int year = Integer.parseInt(PayrollPeriod.substring(0, 4));
+        int month = Integer.parseInt(PayrollPeriod.substring(4, 6));
+        System.out.println(getDaysByYearMonth(year, month));
+    }
+
+    /**
+     * @return 当月天数
+     */
+    public static int getCurrentMonthDay() {
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.DATE, 1); // Calendar.DATE 与 Calendar.DAY_OF_MONTH 含义相同，值一样
+        cal.roll(Calendar.DAY_OF_MONTH, -1);
+        return cal.get(Calendar.DATE);
+    }
+
+    /**
+     *
+     * @param year 年份
+     * @param month 月份
+     * @return 指定年月的月天数
+     */
+    public static int getDaysByYearMonth(int year, int month) {
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.YEAR, year);
+        cal.set(Calendar.MONTH, month - 1);
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        cal.roll(Calendar.DAY_OF_MONTH, -1);
+        return cal.get(Calendar.DATE);
+    }
+
+    /**
+     * Calendar.set()
+     */
+    @Test
+    public void testMethod_Set() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.MONTH, 8 - 1); // 八月
+        cal.set(Calendar.DAY_OF_MONTH, 31); // 31号，八月最后一天
+        System.out.println(sdf.format(cal.getTime()));
+
+        cal.set(Calendar.MONTH, Calendar.SEPTEMBER); // 设置月份为九月
+        System.out.println(sdf.format(cal.getTime())); // 2022-10-01。八月有31天，但九月只有30天，31>30, 导致月份进位
+    }
+
+
+    /**
+     * Calendar.add()方法
+     * 低时间单位值向上溢出：向高时间字段进位
+     * 低时间单位值向下溢出：向高时间字段借位
+     */
+    @Test
+    public void testMethod_Add() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.MONTH, 8 - 1); // 八月
+        cal.set(Calendar.DAY_OF_MONTH, 31); // 31号，八月最后一天
+        System.out.println(sdf.format(cal.getTime())); // 2022-08-31
+        cal.add(Calendar.DAY_OF_MONTH, 1); // 天数+1
+        System.out.println(sdf.format(cal.getTime())); // 2022-09-01。八月只有31天，天数向上溢出导致月份进位。
+
+
+        cal.set(Calendar.MONTH, Calendar.MARCH); // 三月
+        cal.set(Calendar.DAY_OF_MONTH, 1); // 1号，三月第一天
+        System.out.println(sdf.format(cal.getTime())); // 2022-03-01
+        cal.add(Calendar.DAY_OF_MONTH, -1);
+        System.out.println(sdf.format(cal.getTime())); // 2022-02-28。月天数最低值为1，天数向下溢出导致月份借位
+    }
+
+    /**
+     * Calendar.roll()方法
+     * 低时间单位值溢出：不会向高时间字段进位或借位
+     */
+    @Test
+    public void testMethod_Roll() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.MONTH, 8 - 1); // 八月
+        cal.set(Calendar.DAY_OF_MONTH, 31); // 31号，八月最后一天
+        System.out.println(sdf.format(cal.getTime()));
+        cal.roll(Calendar.DAY_OF_MONTH, 1); // 回滚到当前月起始第一天
+        System.out.println(sdf.format(cal.getTime())); // 2022-08-01
+
+
+        cal.set(Calendar.MONTH, Calendar.MARCH); // 三月
+        cal.set(Calendar.DAY_OF_MONTH, 1); // 1号
+        System.out.println(sdf.format(cal.getTime()));
+        cal.roll(Calendar.DAY_OF_MONTH, -1); // 回滚到当前月结尾最后一天
+        System.out.println(sdf.format(cal.getTime())); // 2022-03-31
+    }
+
+    @Test
+    public void testCalendarField() {
+        Calendar cal = Calendar.getInstance();
+
+        LOGGER.info("YEAR: {}", cal.get(Calendar.YEAR));
+        LOGGER.info("MONTH: {}", cal.get(Calendar.MONTH));
+        LOGGER.info("DAY OF MONTH: {}", cal.get(Calendar.DAY_OF_MONTH));
+        LOGGER.info("DAY OF WEEK: {}", cal.get(Calendar.DAY_OF_WEEK));
+        LOGGER.info("HOUR OF DAY: {}", cal.get(Calendar.HOUR_OF_DAY));
+        LOGGER.info("MINUTE: {}", cal.get(Calendar.MINUTE));
+        LOGGER.info("MILLISECOND: {}", cal.get(Calendar.MILLISECOND));
+    }
+}
+
+
+
+public class EncodeDecode {
+    private static final Charset GBK = Charset.forName("GBK");
+
+    @Test
+    public void testDecode() {
+        String str = "广东深圳";
+
+        byte[] utf8Bytes = str.getBytes(StandardCharsets.UTF_8);
+        System.out.println("utf-8字节数组：" + Arrays.toString(utf8Bytes));
+
+        byte[] gbkBytes = str.getBytes(GBK);
+        System.out.println("gbk字节数组：" + Arrays.toString(gbkBytes));
+
+
+        System.out.println("------锟拷码------"); // GBK编码, UTF-8解码, UTF-8编码, UTF-8解码(锟拷码)
+        String gbkUtf8Str = new String(gbkBytes, StandardCharsets.UTF_8); // GBK编码(source) -> UTF-8解码
+        System.out.println(gbkUtf8Str); //
+        byte[] gbkUtf8Bytes = gbkUtf8Str.getBytes(StandardCharsets.UTF_8); // UTF-8编码
+        System.out.println("gbk-utf8-utf8字节数组：" + Arrays.toString(gbkUtf8Bytes)); //
+        String gbkUtf8Utf8GbkStr = new String(gbkUtf8Bytes, GBK); // GBK解码
+        System.out.println("锟拷码[GBK(source) -> UTF-8 -> UTF-8 -> GBK]：" + gbkUtf8Utf8GbkStr); // 锟姐东锟斤拷锟斤拷
+
+
+        System.out.println("------回原字符------"); // UTF-8编码，GBK解码，GBK编码，UTF-8解码(原字符)
+        String utf8GbkStr = new String(utf8Bytes, GBK); // UTF-8编码(source) -> GBK解码
+        System.out.println(utf8GbkStr); //
+        byte[] utf8GbkBytes = utf8GbkStr.getBytes(GBK); // GBK编码
+        System.out.println("gbk-utf8-utf8字节数组：" + Arrays.toString(utf8GbkBytes)); //
+        String utf8GbkGbkUtf8Str = new String(utf8GbkBytes, StandardCharsets.UTF_8); // UTF-8解码
+        System.out.println("锟拷码[UTF-8(source) -> GBK -> GBK -> UTF-8)]: " + utf8GbkGbkUtf8Str); // 广东深圳
+    }
+
+    /**
+     * class 01
+     * 编码：将字符转换为字节数组
+     * 解码：将字节数组转换为字符
+     */
+    static class DecodeByGbk {
+        public static final Charset GBK = Charset.forName("GBK");
+
+        public static void main(String[] args) {
+
+            String str = "广东深圳";
+            byte[] utf8Bytes = str.getBytes(StandardCharsets.UTF_8); // 1.UTF-8编码
+            System.out.println("utf-8 bytes: " + Arrays.toString(utf8Bytes));
+
+
+            System.out.println("\n------古文码------"); // UTF-8编码，GBK解码 （古文码）
+            String utf8GbkStr = new String(utf8Bytes, GBK); // 2.GBK解码
+            System.out.println("[UTF-8(source) -> GBK]: " + utf8GbkStr); // 骞夸笢娣卞湷
+
+
+            System.out.println("\n------其他乱码------"); // UTF-8编码(source) -> GBK解码 -> UTF-8编码 -> GBK解码 （锟拷码）
+            byte[] utf8GbkUtf8Bytes = utf8GbkStr.getBytes(StandardCharsets.UTF_8); // 3.UTF-8编码
+            System.out.println("utf8-gbk-utf8 byte array: " + Arrays.toString(utf8GbkUtf8Bytes));
+            String utf8GbkUtf8GbkUStr = new String(utf8GbkUtf8Bytes, GBK); // 4.GBK解码
+            System.out.println("[UTF-8(source) -> GBK -> UTF-8 -> GBK]: " + utf8GbkUtf8GbkUStr);  // 楠炲じ绗㈠ǎ鍗炴狗
+
+
+            System.out.println("\n------锟拷码------"); // GBK编码, UTF-8解码, UTF-8编码, GBK解码(锟拷码)
+            byte[] gbkBytes = str.getBytes(GBK); // GBK编码(source)
+            String gbkUtf8Str = new String(gbkBytes, StandardCharsets.UTF_8); // UTF-8解码
+//        System.out.println(gbkUtf8Str);
+            byte[] gbkUtf8Utf8Bytes = gbkUtf8Str.getBytes(StandardCharsets.UTF_8); // UTF-8编码
+            System.out.println("gbk-utf8-utf8 byte array: " + Arrays.toString(gbkUtf8Utf8Bytes));
+            String gbkUtf8Utf8GbkStr = new String(gbkUtf8Utf8Bytes, GBK); // GBK解码
+            System.out.println("[GBK(source) -> UTF-8 -> UTF-8 -> GBK]: " + gbkUtf8Utf8GbkStr); // 锟姐东锟斤拷锟斤拷
+        }
+    }
+
+    /**
+     * class 02
+     */
+    static class DecodeByUtf8 {
+        public static final Charset GBK = Charset.forName("GBK");
+
+        public static void main(String[] args) {
+
+            String str = "广东深圳";
+            byte[] gbkBytes = str.getBytes(GBK); // 1.GBK编码
+            System.out.println("source gbk bytes: " + Arrays.toString(gbkBytes));
+
+
+            System.out.println("\n------口字码------"); // GBK编码 -> UTF-8解码 （古文码）
+            String gbkUtf8Str = new String(gbkBytes, StandardCharsets.UTF_8); // 2.UTF-8解码
+            System.out.println("[GBK(source) -> UTF-8]: " + gbkUtf8Str); // �㶫����
+
+
+            System.out.println("\n------问号码------"); // GBK编码(source) -> UTF-8解码 -> GBK编码 -> UTF-8解码 （问号码）
+            byte[] gbkUtf8GbkBytes = gbkUtf8Str.getBytes(GBK); // 3.GBK编码
+            System.out.println("gbk-utf8-gbk byte array: " + Arrays.toString(gbkUtf8GbkBytes));
+            String gbkUtf8GbkUtf8Str = new String(gbkUtf8GbkBytes, StandardCharsets.UTF_8); // 4.UTF-8解码
+            System.out.println("[GBK(source) -> UTF-8 -> GBK -> UTF-8]: " + gbkUtf8GbkUtf8Str);  // ??????
+
+
+            System.out.println("\n------回原字符------"); // UTF-8编码，GBK解码，GBK编码，UTF-8解码(原字符)
+            byte[] utf8Bytes = str.getBytes(StandardCharsets.UTF_8); // UTF-8编码(source)
+            String utf8GbkStr = new String(utf8Bytes, GBK); // GBK解码
+//        System.out.println(utf8GbkStr); //
+            byte[] utf8GbkGbkBytes = utf8GbkStr.getBytes(GBK); // GBK编码
+            System.out.println("utf8-gbk-gbk byte array: " + Arrays.toString(utf8GbkGbkBytes));
+            String utf8GbkGbkUtf8Str = new String(utf8GbkGbkBytes, StandardCharsets.UTF_8); // UTF-8解码
+            System.out.println("[UTF-8(source) -> GBK -> GBK -> UTF-8)]: " + utf8GbkGbkUtf8Str); // 广东深圳
+        }
+    }
+}
+
+
+
+public class OperatorTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(OperatorTest.class);
+
+    @Test
+    public void testGetLowestOneBit() {
+        int num = 6;
+        int lowest = lowestOneBit(num);
+        LOGGER.info("lowest one bit of '{}' is {}({})", num, lowest, Utils.NumberUtil.toBinaryString32(lowest));
+    }
+
+    @Test
+    public void testGetHighestOneBit() {
+        int i = 7;
+        int highest = highestOneBit(i);
+        LOGGER.info("highest one bit of '{}' is {}({})", i, highest, Utils.NumberUtil.toBinaryString32(highest));
+    }
+
+    /**
+     * 给定一个整数X,返回一个整数Y。Y为X对应二进制数最低位1所对应二进制数的十进制数值
+     * 如 X=10(1010), 则Y=2(0010)
+     * 如 X=12(1100), 则Y=4(0100)
+     * 算法：A与-A进行&运算
+     */
+    public int lowestOneBit(int i) {
+        // HD, Section 2-1
+        return i & -i;
+    }
+
+
+    /**
+     * 给定一个整数X,返回一个整数Y。Y为X对应二进制数除最高一位有效位外，低位全为0的二进制数Z对应的十进制数值
+     * 如 X=5(101), 则Y=4(100)
+     * 如 X=2(010), 则Y=2(010)
+     * 算法：从A的二进制最高有效位置开始，将后面的所有比特置为1，得到二进制B；二进制B带符号右移一位得到C；B-C即可得到最高位。
+     * 5 101
+     * 第一步：101 将后面的所有比特置为1得，111
+     * 第二步：111 右移1位得，11
+     * 第三步：111 - 11 = 100（二进制减法）
+     */
+    public int highestOneBit(int i) {
+        i |= (i >> 1);
+        i |= (i >> 2);
+        i |= (i >> 4);
+        i |= (i >> 8);
+        i |= (i >> 16);
+        return i - (i >>> 1);
+    }
+
+    /**
+     * (<<)带符号左移，右边补0
+     * (>>)带符号右移，正数左边补0，负数左边补1
+     * (>>>)无符号右移，正负数左边都补0
+     */
+    @Test
+    public void testBitMove() {
+
+        int x = 0xfffffffe; // 0xfffffffe计算机中存储为补码，对应的十进制值：-2
+        System.out.println(x);
+
+        // 负数带符号左移(<<)
+        // 1 0000000 00000000 00000000 00000010    -2原码
+        // 1 1111111 11111111 11111111 11111101    -2反码
+        // 1 1111111 11111111 11111111 11111110    -2补码
+        // 1 1111111 11111111 11111111 11111000    <<左移2位，右边填0
+        // 1 0000000 00000000 00000000 00001000    ③原码；对应真值：-8
+        int i1 = x << 2;
+        LOGGER.info("-2 << 2 = {}", i1);
+
+        // 负数无符号右移(>>)
+        int i2 = x >> 1;
+        LOGGER.info("-2 >> 1 = {}", i2);
+
+        // 负数无符号右移(>>>)
+        // 1 0000000 00000000 00000000 00000010    -2原码
+        // 1 1111111 11111111 11111111 11111101    -2反码
+        // 1 1111111 11111111 11111111 11111110    -2补码
+        // 0 0111111 11111111 11111111 11111111    >>无符号右移2位 ③
+        // 0 0111111 11111111 11111111 11111111    ③原码，真值：2^30-1 = 1073741823
+        int i3 = x >>> 2;
+        LOGGER.info("-2 >>> 2 = {}", i3);
+
+
+        int y = 0x2; // 对应十进制值：2
+
+        // 正数无符号左移(<<)
+        int i4 = y << 2;
+        LOGGER.info("2 << 2 = {}", i4);
+
+        // 正数无符号右移(>>)
+        int i5 = y >> 1;
+        LOGGER.info("2 >> 1 = {}", i5);
+
+        // 正数无符号右移(>>>)
+        int i6 = y >>> 1;
+        System.out.println(Utils.NumberUtil.toBinaryString32(i6));
+        LOGGER.info("2 >>> 1 = {}", i6);
+    }
+
+
+    // 运算符 与(&), 或(|), 非(~), 异或(^)
+    @Test
+    public void testYuHuoFei() {
+        int x = 0x05; // 0 0000000 00000000 00000000 00000101
+        int y = 0x06; // 0 0000000 00000000 00000000 00000110
+
+        // 与
+        int i1 = x & y;
+        LOGGER.info("{} & {} = {}", x, y, i1);
+
+        // 或
+        int i2 = x | y;
+        LOGGER.info("{} | {} = {}", x, y, i2);
+
+        // 非(带符号取反)
+        // 0 0000000 00000000 00000000 00000101    0x05原码 ①
+        // 1 1111111 11111111 11111111 11111010    0x05取反，得到补码形式负数（带符号） ②
+        // 1 0000000 00000000 00000000 00000110    求②的原码（负数，计算机存储其补码）
+        int i3 = ~x; // -{16-(16-1-5)}=-(16-10)=-6      16-1-5：取5的反码的绝对值
+        LOGGER.info("~{} = {}", x, i3);
+
+        // 异或
+        int i4 = x ^ y;
+        LOGGER.info("{} ^ {} = {}", x, y, i4);
+    }
+}
+
+
+
+public class PECSTest {
+
+    /**
+     * <? extends XXX> 限制添加元素，只可以取元素
+     */
+    @Test
+    public void testExtends() {
+        System.out.println("<? extends T> 测试：");
+        List<B> baseList = new ArrayList<>();
+        baseList.add(new B());
+        baseList.add(new C());
+
+        List<? extends B> list = baseList;
+//        list.add(new A()); // 无法通过编译，限制添加
+//        list.add(new B()); // 无法通过编译，限制添加
+//        list.add(new C()); // 无法通过编译，限制添加
+
+        B b = list.get(0); // 正常取元素
+        B b1 = list.get(1); // 正常取元素
+        System.out.println(b);
+        System.out.println(b1);
+    }
+
+    /**
+     * <? super XXX> 可添加XXX及其子类对象，但获取元素无法赋值给除Object以外的其他任何类型
+     */
+    @Test
+    public void testSuper() {
+        System.out.println("<? super T> 测试：");
+        List<? super B> list = new ArrayList<>();
+//        list.add(new A()); // 无法通过编译，限制添加B的祖父类对象
+        list.add(new B()); // 正常添加B
+        list.add(new C()); // 正常添加B子类
+
+        Object object = list.get(0); // 取出的值只能赋值给Object类型变量
+        Object object1 = list.get(1); // 取出的值只能赋值给Object类型变量
+//        B b = list.get(0); // 无法将取出的值赋值给B类型
+//        C c = list.get(0); // 无法将取出的值赋值给B的子类类型
+        System.out.println(object);
+        System.out.println(object1);
+    }
+
+    public interface I {
+        String show();
+    }
+
+    static class A implements I {
+        @Override
+        public String show() {
+            return "A.";
+        }
+    }
+
+    static class B extends A {
+        @Override
+        public String show() {
+            return "B.";
+        }
+    }
+
+    static class C extends B {
+        @Override
+        public String show() {
+            return "C.";
+        }
+    }
+}
