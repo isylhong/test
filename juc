@@ -1,0 +1,764 @@
+public class CountDownLatchTest {
+
+    /**
+     * 多个线程执行各自任务，待所有线程都执行完任务后，执行最后的任务
+     */
+    @Test
+    public void testCountDownLatch() {
+        CountDownLatch countDownLatch = new CountDownLatch(5);
+        ExecutorService executorService = new ThreadPoolExecutor(5, 10, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<Runnable>(5), Executors.defaultThreadFactory(),
+                new ThreadPoolExecutor.DiscardPolicy());
+        for (int i = 0; i < 5; i++) {
+            executorService.execute(new CountDownLatchThread(countDownLatch));
+        }
+
+        try {
+            new Thread(()->{
+                try {
+                    countDownLatch.await();
+                    System.out.println("ceshi");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }).start();
+            executorService.execute(()-> System.out.println("test1"));
+            executorService.shutdown(); // 线程池调用shutdown后便不再接收执行新提交的线程任务了
+            executorService.execute(()-> System.out.println("test2")); // 线程池已关闭，不再执行这个人任务了
+//            System.out.println(executorService.awaitTermination(10000L, TimeUnit.MILLISECONDS)); // 调用awaitTermination后会阻塞该线程，直到线程池中所有线程执行完
+            countDownLatch.await();
+            System.out.println("所有线程执行完后，执行最后任务...");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    class CountDownLatchThread implements Runnable {
+        private final CountDownLatch latch;
+
+        public CountDownLatchThread(CountDownLatch latch) {
+            this.latch = latch;
+        }
+
+        @Override
+        public void run() {
+            try {
+                Thread.sleep(2000L);
+                System.out.println(Thread.currentThread().getName() + " 完成了任务");
+                latch.countDown();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+
+
+public class CyclicBarrierTest {
+
+    public List<String> createThreadNames() {
+        List<String> threadNames = new ArrayList<>();
+        threadNames.add("小明");
+        threadNames.add("小红");
+        threadNames.add("小雪");
+        return threadNames;
+    }
+
+    @Test
+    public void testCyclicBarrierWithAction() {
+        Runnable barrierAction = new BarrierAction();
+        ThreadFactory threadFactory = new NamedThreadFactory(createThreadNames());
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(3, barrierAction); // 所有线程都每运行到达一个await拦截点时，执行一次barrierAction
+        ExecutorService executorService = new ThreadPoolExecutor(4, 8, 0L, TimeUnit.MILLISECONDS,
+                new PriorityBlockingQueue<>(5), threadFactory, new ThreadPoolExecutor.DiscardOldestPolicy());
+        for (int i = 0; i < 3; i++) {
+            executorService.execute(new CyclicBarrierThread(cyclicBarrier));
+        }
+        executorService.shutdown();
+        try {
+            executorService.awaitTermination(10000L, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void testCyclicBarrierWithoutAction() {
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(3);
+        ThreadFactory threadFactory = new NamedThreadFactory(createThreadNames());
+        ExecutorService executorService = new ThreadPoolExecutor(5, 10, 0L, TimeUnit.MILLISECONDS,
+                new PriorityBlockingQueue<>(5), threadFactory, new ThreadPoolExecutor.DiscardOldestPolicy());
+        for (int i = 0; i < 3; i++) {
+            executorService.execute(new CyclicBarrierThread(cyclicBarrier));
+        }
+        executorService.shutdown();
+        try {
+            executorService.awaitTermination(10000L, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * class 01
+     */
+    class BarrierAction implements Runnable {
+        private final AtomicInteger atomicInteger = new AtomicInteger(1);
+
+        @Override
+        public void run() {
+            switch (atomicInteger.getAndIncrement()) {
+                case 1:
+                    System.out.println("买菜完成！");
+                    break;
+                case 2:
+                    System.out.println("洗菜完成！！");
+                    break;
+                case 3:
+                    System.out.println("炒菜完成！！！");
+                    break;
+                default:
+                    System.out.println("一起吃饭ing");
+            }
+        }
+    }
+
+    /**
+     * class 02
+     */
+    class CyclicBarrierThread implements Runnable {
+
+        private final CyclicBarrier cyclicBarrier;
+
+        public CyclicBarrierThread(CyclicBarrier cyclicBarrier) {
+            this.cyclicBarrier = cyclicBarrier;
+        }
+
+        @Override
+        public void run() {
+            try {
+                System.out.println(Thread.currentThread().getName() + " 去买菜.");
+                Thread.sleep(1000L);
+                cyclicBarrier.await();
+                System.out.println(Thread.currentThread().getName() + " 开始洗菜..");
+                Thread.sleep(1000L);
+                cyclicBarrier.await();
+                System.out.println(Thread.currentThread().getName() + " 开始炒菜...");
+                cyclicBarrier.await();
+            } catch (InterruptedException | BrokenBarrierException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * class 03
+     */
+    class NamedThreadFactory implements ThreadFactory {
+        private final List<String> threadNames;
+        private final ThreadGroup group;
+        private final AtomicInteger threadNumber = new AtomicInteger(0);
+
+        public NamedThreadFactory(List<String> threadNames) {
+            this.threadNames = threadNames;
+            SecurityManager s = System.getSecurityManager();
+            group = (s != null) ? s.getThreadGroup() :
+                    Thread.currentThread().getThreadGroup();
+        }
+
+        @Override
+        public Thread newThread(Runnable r) {
+
+            Thread t = new Thread(group, r, this.threadNames.get(threadNumber.getAndIncrement()), 0);
+            if (t.isDaemon())
+                t.setDaemon(false);
+            if (t.getPriority() != Thread.NORM_PRIORITY)
+                t.setPriority(Thread.NORM_PRIORITY);
+            return t;
+        }
+    }
+}
+
+
+
+public class LockTest {
+
+    /**
+     * writerA(running),  readerA读(阻塞) -> readerA读(阻塞) -> readerA读(阻塞)
+     */
+    @Test
+    public void testRunWrite_WaitRead_WaitRead() throws InterruptedException {
+        ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+        ReentrantReadWriteLock.WriteLock writeLock = readWriteLock.writeLock();
+        ReentrantReadWriteLock.ReadLock readLock = readWriteLock.readLock();
+
+        Runnable writeTask = new Runnable() {
+            @Override
+            public void run() {
+                writeLock.lock();
+                Utils.ThreadUtil.printInfoAtFixed("writing", 5000, 10);
+                writeLock.unlock();
+            }
+        };
+
+        Runnable readTask = new Runnable() {
+            @Override
+            public void run() {
+                readLock.lock();
+                Utils.ThreadUtil.printInfoAtFixed("reading", 1000, 2);
+                readLock.unlock();
+            }
+        };
+
+
+        new Thread(writeTask, "WriterA").start();
+
+        Utils.ThreadUtil.sleep(500L);
+
+        new Thread(readTask, "readerA").start();
+//        new Thread(readTask, "readerB").start();
+//        new Thread(readTask, "readerC").start();
+
+        Thread.sleep(5 * 60 * 1000L);
+    }
+
+    /**
+     * threadA写(running) threadA读(写降读，running) threadA读(写降读，running) threadB读(阻塞)
+     */
+    @Test
+    public void testFairWriteLock() throws InterruptedException {
+        ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+
+        Runnable taskA = new Runnable() {
+            @Override
+            public void run() {
+                lock.writeLock().lock();
+                Utils.ThreadUtil.printThreadInfo("获取到写锁");
+                Utils.ThreadUtil.printInfoAtFixed("writing...", 1000, 1);
+                lock.readLock().lock(); // 写降读
+                Utils.ThreadUtil.printThreadInfo("第1次获取到公平读锁");
+                Utils.ThreadUtil.printInfoAtFixed("reading1...", 1000, 1);
+                lock.readLock().lock();
+                Utils.ThreadUtil.printThreadInfo("第2次获取到公平读锁");
+                Utils.ThreadUtil.printInfoAtFixed("reading2...", 1000, 1);
+//                Utils.ThreadUtil.printThreadInfo("释放读锁");
+                lock.writeLock().unlock();
+                Utils.ThreadUtil.printThreadInfo("释放写锁");
+                Utils.ThreadUtil.printInfoAtFixed("taskA is running", 1000, 1);
+            }
+        };
+        new Thread(taskA, "threadA").start();
+
+        Utils.ThreadUtil.sleep(2000);
+
+        Runnable taskB = new Runnable() {
+            @Override
+            public void run() {
+                Utils.ThreadUtil.printThreadInfo("尝试获取读锁");
+                lock.readLock().lock();
+                Utils.ThreadUtil.printThreadInfo("获取到读锁");
+                Utils.ThreadUtil.printInfoAtFixed("reading...", 1000, 2);
+            }
+        };
+        new Thread(taskB, "threadB").start();
+
+        Thread.sleep(10 * 60 * 1000L);
+    }
+
+    @Test
+    public void testConditionWaitSignal() throws InterruptedException {
+        ReentrantLock lock = new ReentrantLock();
+        Condition condition = lock.newCondition();
+
+        Runnable taskA = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    lock.lock();
+                    Utils.ThreadUtil.printThreadInfo("taskA获取到锁");
+                    Utils.ThreadUtil.printInfoAtFixed("taskA running...", 1000, 1);
+                    Utils.ThreadUtil.printThreadInfo("调用condition.wait()进入阻塞");
+                    condition.await();
+                    Utils.ThreadUtil.printThreadInfo("taskA被唤醒");
+                    lock.unlock();
+                    Utils.ThreadUtil.printThreadInfo("taskA释放锁");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+        Runnable taskB = new Runnable() {
+            @Override
+            public void run() {
+                lock.lock();
+                Utils.ThreadUtil.printThreadInfo("taskB获取到锁");
+                Utils.ThreadUtil.printInfoAtFixed("taskB running...", 1000, 2);
+                Utils.ThreadUtil.printThreadInfo("唤醒taskA");
+                condition.signal();
+                try {
+                    Thread.sleep(20 * 1000L);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                lock.unlock();
+                Utils.ThreadUtil.printThreadInfo("taskB释放锁");
+            }
+        };
+
+        new Thread(taskA).start();
+        Utils.ThreadUtil.printInfoAtFixed("", 1000, 10);
+        new Thread(taskB).start();
+
+        Thread.sleep(2 * 60 * 1000L);
+    }
+
+    /**
+     * Condition接口:
+     * juc工具包中用于替换wait()、signal()实现线程间通信功能的类。
+     *
+     * 1、原生java
+     * 通过synchronize、wait、signal实现threadA和threadB之间的通信。
+     *
+     * threadA流程：获取到锁obj -》 阻塞当前线程 -》 释放获取到的锁obj。
+     * synchronize(obj){
+     *   ...
+     *   obj.wait();
+     *   ...
+     * }
+     * threadB流程：获取到锁obj -》唤醒threadA -> 释放获取到的锁obj -》threadA再次获取到锁obj -》threadA继续运行。
+     * synchronize(obj){
+     *   ...
+     *   obj.signal()
+     *   ...
+     * }
+     *
+     * 2、juc工具包
+     * 通过ReentrantLock.lock()|unlock()、Condition.wait()、Condition.signal()实现threadA和threadB之间的通信。
+     *
+     * threadA流程：获取到锁myLock -》 阻塞当前线程 -》 释放获取到的锁myLock。
+     * {
+     *   ReentrantLock myLock = new ReentrantLock();
+     *   myLock.lock();
+     *   ...
+     *   Condition.wait()
+     *   ...
+     *   myLock.unlock();
+     * }
+     *
+     * threadB流程：获取到锁myLock -》唤醒threadA -> 释放获取到的锁myLock -》threadA再次获取到锁myLock -》threadA继续运行。
+     * {
+     *   ReentrantLock myLock = new ReentrantLock();
+     *   myLock.lock();
+     *   ...
+     *   Condition.signal()
+     *   ...
+     *   myLock.unlock();
+     * }
+     */
+    @Test
+    public void testCondition() throws InterruptedException {
+        final ReentrantLock myLock = new ReentrantLock();
+        Condition myCondition = myLock.newCondition();
+        Thread threadA = new Thread(() -> {
+            myLock.lock();
+            Utils.ThreadUtil.printThreadInfo("获取到myLock锁...");
+            try {
+                Utils.ThreadUtil.printThreadInfo("调用myCondition.await()进入阻塞状态");
+                myCondition.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            myLock.unlock();
+            Utils.ThreadUtil.printThreadInfo("释放myLock锁...");
+        }, "threadA");
+        threadA.start();
+        Thread.sleep(1000L); // 保证threadA已运行，获取锁进入阻塞状态
+
+        Thread threadB = new Thread(() -> {
+            myLock.lock();
+            Utils.ThreadUtil.printThreadInfo("获取到myLock锁...");
+            Utils.ThreadUtil.printThreadInfo("调用myCondition.signal()唤醒阻塞线程");
+            myCondition.signal();
+            myLock.unlock();
+            Utils.ThreadUtil.printThreadInfo("释放myLock锁...");
+        }, "threadB");
+        threadB.start();
+
+        threadB.interrupt();
+        Thread.sleep(5000L);
+
+        Utils.ThreadUtil.printThreadInfo("主线程结束");
+    }
+
+    /**
+     * Reentrant.acquireInterruptibly()
+     * 当前线程获取锁失败被阻塞后，可被中断信号唤醒，并抛出InterruptedException
+     */
+    @Test
+    public void testReentrantAcquireInterruptibly() throws InterruptedException {
+        final ReentrantLock myLock = new ReentrantLock();
+
+        Thread threadA = new Thread(() -> {
+            myLock.lock();
+
+            int i = 0;
+            long nextExecuteTime = System.currentTimeMillis();
+            do {
+                long currentTimeMillis = System.currentTimeMillis();
+                if (nextExecuteTime <= currentTimeMillis) {
+                    Utils.ThreadUtil.printThreadInfo("运行中...");
+                    nextExecuteTime = currentTimeMillis + 1000L;
+                    i++;
+                }
+            } while (i <= 10);
+            myLock.unlock();
+        }, "threadA");
+        threadA.start();
+        Thread.sleep(1000L); // 保证threadA已运行，获取锁进入阻塞状态
+
+        Thread threadB = new Thread(() -> {
+            Utils.ThreadUtil.printThreadInfo("尝试获取锁");
+            try {
+                myLock.lockInterruptibly();
+                boolean isInterrupted = Thread.currentThread().isInterrupted();
+                String info = (isInterrupted ? "发现中断信号" : "为发现中断信号") + "，中断标志位为：" + isInterrupted;
+                Utils.ThreadUtil.printThreadInfo(info);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                Utils.ThreadUtil.printThreadInfo("处理中断，中断标志位为：" + Thread.currentThread().isInterrupted());
+            }
+            Utils.ThreadUtil.printThreadInfo("释放锁");
+            myLock.unlock(); // 不调用unlock()释放锁的话，threadA会一直处于阻塞(同步阻塞)并尝试获取锁
+        }, "threadB");
+        threadB.start();
+        Thread.sleep(5000L); // 确保threadB已开始运行，并因获取不到锁而阻塞(同步阻塞)
+
+        threadB.interrupt();
+
+        Thread.sleep(15000L); // 让主线程睡眠，防止junit原因提前结束线程，影响其他线程对中断信号的响应效果
+        Utils.ThreadUtil.printThreadInfo("主线程结束");
+    }
+
+    /**
+     * 公平锁测试
+     */
+    @Test
+    public void testReentrantLockFair() throws InterruptedException {
+        final ReentrantLock lock = new ReentrantLock(true);
+
+        String[] threadNames = new String[]{"threadA", "threadB", "threadC"};
+        for (int i = 0; i < 3; i++) {
+            new Thread(() -> {
+                for (int j = 0; j < 2; j++) {
+                    lock.lock();
+                    Utils.ThreadUtil.printThreadInfo("");
+                    lock.unlock(); // theadA释放锁再次尝试获取锁的时候，threadB、threadC已经因获取锁失败而阻塞。
+                }
+            }, threadNames[i]).start();
+        }
+
+        Thread.sleep(1000L);
+    }
+
+    /**
+     * 非公平锁测试
+     */
+    @Test
+    public void testReentrantLockNonFair() throws InterruptedException {
+        final ReentrantLock lock = new ReentrantLock(false);
+
+        String[] threadNames = new String[]{"threadA", "threadB", "threadC"};
+        for (int i = 0; i < 3; i++) {
+            new Thread(() -> {
+                for (int j = 0; j < 2; j++) {
+                    lock.lock();
+                    Utils.ThreadUtil.printThreadInfo("");
+                    lock.unlock();
+                }
+            }, threadNames[i]).start();
+        }
+
+        Thread.sleep(1000L);
+    }
+
+}
+
+
+
+public class PhaserTest {
+    // 注意，不要用junit去测试。主线程中不使用 while (!myPhaser.isTerminated()) {}时，线程会提前结束，达不到预期效果。
+    public static void main(String[] args) {
+        MyPhaser myPhaser = new MyPhaser();
+        myPhaser.bulkRegister(3);
+        System.out.println(myPhaser.getRegisteredParties());
+
+        Thread thread1 = new Thread(new XiaoMeiTask(myPhaser));
+        thread1.setName("小美");
+        thread1.start();
+
+        Thread thread2 = new Thread(new XiaoMingTask(myPhaser));
+        thread2.setName("小明");
+        thread2.start();
+
+        Thread thread3 = new Thread(new XiaoXueTask(myPhaser));
+        thread3.setName("小雪");
+        thread3.start();
+
+        while (!myPhaser.isTerminated()) {
+            System.out.println(myPhaser.getRegisteredParties());
+        }
+        System.out.println("完成所有事情，大家一起开始吃饭");
+    }
+
+    /**
+     * class 04
+     */
+    static class MyPhaser extends Phaser {
+
+        @Override
+        protected boolean onAdvance(int phase, int registeredParties) {
+            switch (phase) {
+                case 0:
+                    System.out.println("买食材: " + registeredParties + "人");
+                    return false;
+                case 1:
+                    System.out.println("处理食材: " + registeredParties + "人");
+                    return false;
+                case 2:
+                    System.out.println("炒菜: " + registeredParties + "人");
+//                this.forceTermination();
+                    return false;
+                default:
+                    return true;
+            }
+        }
+    }
+
+    /**
+     * class 01
+     */
+    static class XiaoMeiTask implements Runnable {
+        private final Phaser phaser;
+
+        public XiaoMeiTask(Phaser phaser) {
+            this.phaser = phaser;
+        }
+
+        @Override
+        public void run() {
+            try {
+                Thread.sleep(1000L);
+                System.out.println(Thread.currentThread().getName() + " 去买肉.");
+                Thread.sleep(1000L);
+                phaser.arriveAndAwaitAdvance();
+                System.out.println(Thread.currentThread().getName() + " 开始切肉..");
+                Thread.sleep(1000L);
+                phaser.arriveAndAwaitAdvance();
+                System.out.println(Thread.currentThread().getName() + " 开始炒菜...");
+                phaser.arriveAndAwaitAdvance();
+
+                phaser.arriveAndDeregister();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * class 02
+     */
+    static class XiaoMingTask implements Runnable {
+        private final Phaser phaser;
+
+        public XiaoMingTask(Phaser phaser) {
+            this.phaser = phaser;
+        }
+
+        @Override
+        public void run() {
+            try {
+                System.out.println(Thread.currentThread().getName() + " 去买酱油.之后什么都不需要做，等待吃饭.");
+                Thread.sleep(1000L);
+                phaser.arriveAndAwaitAdvance();
+
+                phaser.arriveAndDeregister();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * class 03
+     */
+    static class XiaoXueTask implements Runnable {
+        private final Phaser phaser;
+
+        public XiaoXueTask(Phaser phaser) {
+            this.phaser = phaser;
+        }
+
+        @Override
+        public void run() {
+            try {
+                System.out.println(Thread.currentThread().getName() + " 去买蔬菜.");
+                Thread.sleep(1000L);
+                phaser.arriveAndAwaitAdvance();
+                System.out.println(Thread.currentThread().getName() + " 开始洗菜..");
+                Thread.sleep(1000L);
+                phaser.arriveAndAwaitAdvance();
+
+                phaser.arriveAndDeregister();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+
+
+public class SemaphoreTest {
+
+    /**
+     * 信号量集的使用
+     */
+    @Test
+    public void testSemaphoreSignal() {
+        Semaphore semaphore = new Semaphore(2);
+        ExecutorService executorService = new ThreadPoolExecutor(5, 10, 1000L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(), Executors.defaultThreadFactory(), new ThreadPoolExecutor.AbortPolicy());
+        for (int i = 0; i < 5; i++) {
+            executorService.submit(new SemThread(semaphore, "thread" + i));
+        }
+        executorService.shutdown();
+        try {
+            executorService.awaitTermination(10000L, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 使用 Semaphore 完成同步互斥顺序执行线程 A,B,C 线程任务
+     */
+    @Test
+    public void testSemaphoreSync() {
+        List<Semaphore> semaphoreList = new ArrayList<>();
+        semaphoreList.add(new Semaphore(1));
+        semaphoreList.add(new Semaphore(0));
+        semaphoreList.add(new Semaphore(0));
+
+        new ThreadA(semaphoreList).start();
+        new ThreadB(semaphoreList).start();
+        new ThreadC(semaphoreList).start();
+
+        try {
+            Thread.sleep(5000L);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * class 04
+     */
+    class SemThread extends Thread {
+
+        private final Semaphore semaphore;
+
+        public SemThread(Semaphore semaphore, String threadName) {
+            super(threadName);
+            this.semaphore = semaphore;
+        }
+
+        @Override
+        public void run() {
+            try {
+                semaphore.acquire();
+                System.out.println(Thread.currentThread().getName() + " 获取一个信号量");
+                Thread.sleep(2000L);
+                System.out.println(Thread.currentThread().getName() + " done");
+                semaphore.release();
+                System.out.println(Thread.currentThread().getName() + " 释放一个信号量");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * class 01
+     */
+    class ThreadA extends Thread {
+        private final List<Semaphore> semaphores;
+
+        public ThreadA(List<Semaphore> semaphores) {
+            this.semaphores = semaphores;
+        }
+
+        @Override
+        public void run() {
+            try {
+                Semaphore semaphore0 = semaphores.get(0); // 获取信号量集0
+                semaphore0.acquire(); // 从信号量集0获取一个信号
+                Thread.sleep(1000L);
+                System.out.println("ThreadA...");
+                semaphores.get(1).release(); // 为信号量集1增一个信号
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+        }
+    }
+
+    /**
+     * class 02
+     */
+    class ThreadB extends Thread {
+        private final List<Semaphore> semaphores;
+
+        public ThreadB(List<Semaphore> semaphores) {
+            this.semaphores = semaphores;
+        }
+
+        @Override
+        public void run() {
+            try {
+                Semaphore semaphore1 = semaphores.get(1); // 获取信号量集1一个信号
+                semaphore1.acquire(); // 从信号量集1获取一个信号
+                Thread.sleep(1000L);
+                System.out.println("ThreadB...");
+                semaphores.get(2).release();  // 为信号量集2增一个信号
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * class 03
+     */
+    class ThreadC extends Thread {
+        private final List<Semaphore> semaphores;
+
+        public ThreadC(List<Semaphore> semaphores) {
+            this.semaphores = semaphores;
+        }
+
+        @Override
+        public void run() {
+            try {
+                Semaphore semaphore2 = semaphores.get(2); // 获取信号量集2
+                semaphore2.acquire(); // 从信号量集2获取一个信号
+                Thread.sleep(1000L);
+                System.out.println("ThreadC...");
+                semaphore2.release(); // 信号量集2释放一个信号
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+        }
+    }
+}
