@@ -1,0 +1,506 @@
+public class ReflectTest {
+
+    /**
+     * method反射测试
+     */
+    class MethodReflectTest {
+        private final Logger LOGGER = LoggerFactory.getLogger(FieldReflectTest.class);
+
+        /**
+         * 通过反射获取类中的指定方法，并执行
+         */
+        @Test
+        public void methodInvokeTest() throws InstantiationException,
+                IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+            Class<SubReflection> myReflectionClass = SubReflection.class;
+
+            SubReflection subReflection = myReflectionClass.newInstance();
+
+            // 反射调用public方法
+            Method publicMethod = myReflectionClass.getDeclaredMethod("publicMethodSub");
+            publicMethod.invoke(subReflection);
+
+            // 反射调用protected方法, 需使用getDeclaredMethod(...)方法; 使用getMethod(...)方法会报异常 java.lang.NoSuchMethodException
+            Method protectedMethod = myReflectionClass.getDeclaredMethod("protectedMethodSub");
+            protectedMethod.setAccessible(true); // protected修饰的方法需设置访问权限
+            protectedMethod.invoke(subReflection);
+
+            // 反射调用private方法, 需使用getDeclaredMethod(...)方法; 使用getMethod(...)方法会报异常 java.lang.NoSuchMethodException
+            Method privateMethod = myReflectionClass.getDeclaredMethod("privateMethodSub");
+            privateMethod.setAccessible(true); // private修饰的方法需设置访问权限
+            privateMethod.invoke(subReflection);
+
+        }
+
+        /**
+         * 反射获取Method对象
+         * getDeclaredMethods()：获取指定类(不含祖父类)、接口类中所有 private、protected、public、default 修饰的方法，包括当前类中重载的的祖父类方法。
+         * getMethods()：获取到指定类(含祖父类)、接口类中所有 public、default 修饰的方法。如果子类中有重载方法，则获取子类中重载的方法。
+         */
+        @Test
+        public void classMethodsGetTest() {
+            Class<SubReflection> myReflectionClass = SubReflection.class;
+
+            // getMethods()：获取当前类(含祖父类)中的所有public、default修饰方法
+            LOGGER.info("getMethods()：获取当前类(含祖父类)中的所有public、default修饰方法");
+            Method[] methods = myReflectionClass.getMethods();
+            for (Method method : methods) {
+                // 打印非Object类中的方法，同时不打印setXXX()和getXXX()方法
+                if (!method.getDeclaringClass().getSimpleName().equals("Object")) {
+                    String methodName = method.getName();
+                    if (methodName.startsWith("set") || methodName.startsWith("get")) {
+                        continue;
+                    }
+                    String modifierStr = ClassUtil.getModifierStr(method.getModifiers()); // 获取方法修饰符
+                    Class<?>[] methodParameterTypes = method.getParameterTypes(); // 获取方法参数类型
+                    LOGGER.info("{}", method);
+                }
+            }
+
+            // getDeclaredMethods()：获取当前类(不包括祖父类)、接口类中的所有private、protected、public、package、default修饰的方法, 包括当前类中重载的祖父类方法
+            System.out.println();
+            LOGGER.info("getDeclaredMethods()：获取当前类(不包括祖父类)、接口类中的所有private、protected、public、package、default修饰的方法, " +
+                    "包括当前类中重载的祖父类方法");
+            Method[] declaredMethods = myReflectionClass.getDeclaredMethods();
+            for (Method method : declaredMethods) {
+                String methodName = method.getName();
+                if (methodName.startsWith("set") || methodName.startsWith("get")) {
+                    continue;
+                }
+                LOGGER.info("{}", method);
+            }
+        }
+
+        @Test
+        public void interfaceMethodsGetTest() {
+            Class<Phone> fruitClass = Phone.class;
+
+            // getMethods()获取当前类及父类（含祖父类）中的所有public方法
+            LOGGER.info("getMethods()获取当前类及父类（含祖父类）中的所有public方法");
+            Method[] methods = fruitClass.getMethods();
+            for (Method method : methods) {
+                // 打印非Object类中的方法，同时不打印setXXX()和getXXX()方法
+                if (!method.getDeclaringClass().getSimpleName().equals("Object")) {
+                    String methodName = method.getName();
+                    if (methodName.startsWith("set") || methodName.startsWith("get")) {
+                        continue;
+                    }
+                    String modifierStr = ClassUtil.getModifierStr(method.getModifiers()); // 获取方法修饰符
+                    Class<?>[] methodParameterTypes = method.getParameterTypes(); // 获取方法参数类型
+                    LOGGER.info("{}", method);
+                }
+            }
+
+            // getDeclaredMethods()获取所有方法(含private、protected、public、package), 不包括祖父类中的方法
+            System.out.println();
+            LOGGER.info("getDeclaredMethods()获取当前类中的所有方法(含private、protected、public、package), 不包括父类中的方法");
+            Method[] declaredMethods = fruitClass.getDeclaredMethods();
+            for (Method method : declaredMethods) {
+                String methodName = method.getName();
+                if (methodName.startsWith("set") || methodName.startsWith("get")) {
+                    continue;
+                }
+                LOGGER.info("{}", method);
+            }
+        }
+    }
+
+    /**
+     * filed反射测试
+     */
+    class FieldReflectTest {
+        private final Logger LOGGER = LoggerFactory.getLogger(FieldReflectTest.class);
+
+        private final Class<SubReflection> myReflectionClass = SubReflection.class;
+
+        /**
+         * 反射获取字段
+         * 注意：
+         * getDeclaredFields()方法可获取到指定类中 private、protected、public 修饰的所有字段
+         * getFields()方法只能获取到指定类（含祖父类）中 public 修饰的所有字段
+         */
+        @Test
+        public void fieldsGetTest() {
+            // getFields()获取所有public字段, 包括父类（含祖父类）中的所有public字段
+            LOGGER.info("getFields()获取所有public字段, 包括父类（含祖父类）中的所有public字段");
+            Field[] fields = myReflectionClass.getFields();
+            for (Field field : fields) {
+                int modifiers = field.getModifiers();
+                LOGGER.info("{} ({}) ", field.getName(), ClassUtil.getModifierStr(modifiers));
+            }
+
+            // getDeclaredFields()获取所有字段(含private、protected、public), 不包括父类/祖父类中的字段
+            // 获取所有字段(public, protected, private)，不包括父类字段
+            LOGGER.info("获取所有字段(public, protected, private)，不包括父类字段");
+            Field[] declaredFields = myReflectionClass.getDeclaredFields();
+            for (Field field : declaredFields) {
+                int modifiers = field.getModifiers();
+                LOGGER.info("{} ({}) ", field.getName(), ClassUtil.getModifierStr(modifiers));
+            }
+        }
+
+        /**
+         * 反射访问指定类中的属性
+         */
+        @Test
+        public void filedAccessTest() throws NoSuchFieldException, InstantiationException, IllegalAccessException {
+
+            SubReflection subReflection = myReflectionClass.newInstance();
+
+            // 反射访问public字段
+            Field publicField = myReflectionClass.getField("pub");
+            publicField.set(subReflection, 999);
+
+            // 反射访问protected字段, 需使用getDeclaredField(...)方法; 使用getField(...)方法会报异常java.lang.NoSuchFieldException
+            Field protectedField = myReflectionClass.getDeclaredField("pro");
+            protectedField.setAccessible(true); // protected修饰的方法需设置访问权限
+            protectedField.set(subReflection, new int[]{1, 2});
+
+            // 反射访问private字段, 需使用getDeclaredField(...)方法; 使用getField(...)方法会报异常java.lang.NoSuchFieldException
+            Field privateField = myReflectionClass.getDeclaredField("pri");
+            privateField.setAccessible(true); // private修饰的方法需设置访问权限
+            privateField.set(subReflection, "a private field");
+
+            LOGGER.info(subReflection.toString());
+        }
+
+        /**
+         * 通过反射访问父类（含祖父类）中字段
+         */
+        @Test
+        public void superClassFiledAccessTest() throws InstantiationException, IllegalAccessException
+                , NoSuchFieldException {
+
+            SubReflection subReflection = myReflectionClass.newInstance();
+
+            // 1. 访问父类public字段。
+            Field pubFiled = myReflectionClass.getField("p_pub");
+            pubFiled.set(subReflection, "super public field...");
+
+
+            // 2. 访问父类（含祖父类）的所有protected字段。
+            // 子类无法通过getDeclaredField(...)直接获取到父类中的字段。
+            // 方法：递归父类。先通过getSuperclass()获取父类，再通过父类中的getDeclaredField(...)方法访问父类中的protected方法
+            Class<? super SubReflection> superClass = myReflectionClass.getSuperclass();
+            while (superClass != null) {
+                Field proFiled;
+                try {
+                    proFiled = superClass.getDeclaredField("p_pro");
+                } catch (NoSuchFieldException e) {
+                    superClass = superClass.getSuperclass();
+                    continue;
+                }
+                proFiled.setAccessible(true);
+                proFiled.set(subReflection, "super protected field...");
+                superClass = superClass.getSuperclass();
+            }
+
+
+            // 3. 访问父类（含祖父类）的所有private字段
+            // 遍历父类，通过父类的getDeclaredFields()获取父类所有字段，遍历字段查找符合要求的字段
+            List<Field> fieldList = new ArrayList<>();
+            superClass = myReflectionClass.getSuperclass();
+            while (superClass != null) { // 逐级遍历父类
+                fieldList.addAll(Arrays.asList(superClass.getDeclaredFields()));
+                superClass = superClass.getSuperclass();
+            }
+            Field priFiledSuper = null;
+            for (Field field : fieldList) {
+                if (field.getName().equals("p_pri")) {
+                    priFiledSuper = field;
+                    priFiledSuper.setAccessible(true);
+                    priFiledSuper.set(subReflection, "super private field...");
+                }
+            }
+            LOGGER.info(subReflection.toString());
+        }
+    }
+
+    /**
+     * constructor反射测试
+     */
+    class ConstructorReflectTest {
+        private final Logger LOGGER = LoggerFactory.getLogger(FieldReflectTest.class);
+        private final Class<SubReflection> myReflectionClass = SubReflection.class;
+
+        /**
+         * 通过反射实例化一个对象
+         * 步骤：
+         * 1. 反射获取Constructor对象，
+         * 2. 通过Constructor对象的newInstance([...])方法实例化一个对象
+         */
+        @Test
+        public void instantiateByReflectTest() throws NoSuchMethodException, InvocationTargetException,
+                InstantiationException, IllegalAccessException {
+            Class<SubReflection> myReflectionClass = SubReflection.class;
+
+            // 无参构造方法创建实例
+            Constructor<SubReflection> reflectionConstructor1 = myReflectionClass.getConstructor();
+            SubReflection subReflection1 = reflectionConstructor1.newInstance();
+            subReflection1.setPub(999);
+            subReflection1.setPro(new int[]{1, 2});
+            LOGGER.info(subReflection1.toString());
+
+            // 有参构造方法创建实例
+            Constructor<SubReflection> reflectionConstructor2 = myReflectionClass.getConstructor(int.class, int[].class,
+                    String.class);
+            SubReflection subReflection2 = reflectionConstructor2.newInstance(999, new int[]{3, 4}, "private filed");
+            LOGGER.info(subReflection2.toString());
+        }
+
+        /**
+         * 通过反射获取构造函数
+         */
+        @Test
+        public void constructorsGetTest() {
+            // getConstructors()获取所有构造函数, 不包括父类构造函数
+            LOGGER.info("getConstructors()获取所有构造函数, 不包括父类构造函数");
+            Constructor[] constructors = myReflectionClass.getConstructors();
+            for (Constructor constructor : constructors) {
+                Class[] constructorParameterTypes = constructor.getParameterTypes();
+                LOGGER.info("{} ({}), {}", constructor.getName(), ClassUtil.getModifierStr(constructor.getModifiers()),
+                        Arrays.asList(constructorParameterTypes));
+            }
+
+            // getDeclaredConstructors()获取所有构造函数, 不包括父类构造函数
+            LOGGER.info("getDeclaredConstructors()获取所有构造函数, 不包括父类构造函数");
+            Constructor[] declaredConstructors = myReflectionClass.getDeclaredConstructors();
+            for (Constructor constructor : declaredConstructors) {
+                Class[] constructorParameterTypes = constructor.getParameterTypes();
+                LOGGER.info("{} ({}), {}", constructor.getName(), ClassUtil.getModifierStr(constructor.getModifiers()),
+                        Arrays.asList(constructorParameterTypes));
+            }
+        }
+    }
+
+    /**
+     * class 01
+     */
+    class ParentReflection {
+        public String p_pub;
+        protected String p_pro;
+        private String p_pri;
+
+        private final Logger LOGGER = LoggerFactory.getLogger(ParentReflection.class);
+
+        public ParentReflection() {
+        }
+
+        public ParentReflection(String p_pub, String p_pro, String p_pri) {
+            this.p_pub = p_pub;
+            this.p_pro = p_pro;
+            this.p_pri = p_pri;
+        }
+
+        public String getP_pub() {
+            return p_pub;
+        }
+
+        public void setP_pub(String p_pub) {
+            this.p_pub = p_pub;
+        }
+
+        public String getP_pro() {
+            return p_pro;
+        }
+
+        public void setP_pro(String p_pro) {
+            this.p_pro = p_pro;
+        }
+
+        public String getP_pri() {
+            return p_pri;
+        }
+
+        public void setP_pri(String p_pri) {
+            this.p_pri = p_pri;
+        }
+
+        @Override
+        public String toString() {
+            return "ParentReflection{" +
+                    "p_pub='" + p_pub + '\'' +
+                    ", p_pro='" + p_pro + '\'' +
+                    ", p_pri='" + p_pri + '\'' +
+                    '}';
+        }
+
+
+        public void publicMethod() {
+            LOGGER.info("super class public method");
+        }
+
+        protected void protectedMethod() {
+            LOGGER.info("super class protected method");
+        }
+
+        private void privateMethod() {
+            LOGGER.info("super class private method");
+        }
+
+        void packageMethod() {
+            LOGGER.info("super class package method");
+        }
+    }
+
+    /**
+     * class 02
+     */
+    class SubReflection extends ParentReflection {
+        public int pub;
+        protected int[] pro;
+        private String pri;
+
+        private final Logger LOGGER = LoggerFactory.getLogger(SubReflection.class);
+
+        public SubReflection() {
+        }
+
+        public SubReflection(int pub, int[] pro) {
+            this.pub = pub;
+            this.pro = pro;
+        }
+
+        public SubReflection(int pub, int[] pro, String pri) {
+            this(pub, pro);
+            this.pri = pri;
+        }
+
+        public int getPub() {
+            return pub;
+        }
+
+        public void setPub(int pub) {
+            this.pub = pub;
+        }
+
+        public int[] getPro() {
+            return pro;
+        }
+
+        public void setPro(int[] pro) {
+            this.pro = pro;
+        }
+
+        public String getPri() {
+            return pri;
+        }
+
+        public void setPri(String pri) {
+            this.pri = pri;
+        }
+
+
+        @Override
+        public String toString() {
+            return "MyReflection{" +
+                    "pub=" + pub +
+                    ", pro=" + Arrays.toString(pro) +
+                    ", pri='" + pri + "'}, " + super.toString();
+        }
+
+        public void publicMethodSub() {
+            LOGGER.info("subclass public method");
+        }
+
+        protected void protectedMethodSub() {
+            LOGGER.info("subclass protected method");
+        }
+
+        private void privateMethodSub() {
+            LOGGER.info("subclass private method");
+        }
+
+        void packageMethodSub() {
+            LOGGER.info("subclass package method");
+        }
+    }
+
+    /**
+     * class 03
+     */
+    static class ClassUtil {
+        public static String getModifierStr(int modifier) {
+            if (Modifier.isPrivate(modifier)) {
+                return "private";
+            } else if (Modifier.isProtected(modifier)) {
+                return "protected";
+            } else if (Modifier.isPublic(modifier)) {
+                return "public";
+            } else {
+                return "";
+            }
+        }
+    }
+}
+
+
+
+public class Utils {
+    /**
+     * class 01
+     */
+    public static class NumberUtil {
+        /**
+         * 给定一个int数，返回指定位数二进制字符串
+         */
+        public static String toBinaryString(int num, int offset) {
+            StringBuilder s = new StringBuilder(Integer.toBinaryString(num));
+            for (int i = s.length(); i < offset; i++) {
+                s.insert(0, "0"); // 不足32位，填0
+            }
+            for (int i = 1; i < (offset / 8); i++) {
+                s.insert(i * 8 + i - 1, " "); // 每8位用空格隔开
+            }
+            return s.toString();
+        }
+
+        /**
+         * 给定一个int数，返回对应的32位二进制字符串
+         */
+        public static String toBinaryString32(int num) {
+            StringBuilder s = new StringBuilder(Integer.toBinaryString(num));
+            for (int i = s.length(); i < 32; i++) {
+                s.insert(0, "0"); // 不足32位，填0
+            }
+            for (int i = 1; i < 4; i++) {
+                s.insert(i * 8 + i - 1, " "); // 每8位用空格隔开
+            }
+            return s.toString();
+        }
+    }
+
+    /**
+     * class 02
+     */
+    public static class ThreadUtil {
+        public static void printThreadInfo(String msg) {
+            Thread thread = Thread.currentThread();
+            SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
+            String timeStr = sdf.format(new Date());
+            System.out.println(timeStr + " [" + thread.getName() + "] " + msg);
+        }
+
+        public static void printInfoAtFixed(String msg, int duration, int sec) {
+            int i = 0;
+            long nextExecuteTime = System.currentTimeMillis();
+            long currentTimeMillis;
+            while (true) {
+                currentTimeMillis = System.currentTimeMillis();
+                if (nextExecuteTime <= currentTimeMillis) {
+                    if (i >= sec)
+                        break;
+                    ThreadUtil.printThreadInfo(msg);
+                    nextExecuteTime = currentTimeMillis + duration;
+                    i++;
+                }
+            }
+        }
+
+        public static void sleep(long millis) {
+            int i = 0;
+            long breakTime = System.currentTimeMillis() + millis;
+            while (System.currentTimeMillis() <= breakTime) ;
+        }
+    }
+}
