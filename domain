@@ -1,0 +1,234 @@
+public interface Phone extends Serializable {
+    public abstract String getId();
+
+    @Inherited
+    @Repeatable(CustomAttributes.class)
+    @Target(value = {ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.ANNOTATION_TYPE})
+    @Retention(RetentionPolicy.RUNTIME)
+    @Documented
+    public @interface CustomAttribute {
+
+        String value() default "";
+
+        String attribute() default "";
+    }
+
+
+    @Inherited
+    @Target(value = {ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    @Documented
+    public @interface CustomAttributes {
+        iPhone.CustomAttribute[] value();
+    }
+
+
+    @Inherited
+    @Target({ElementType.TYPE,ElementType.FIELD,ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    @Documented
+    public @interface CustomDescription {
+        String value() default "";
+    }
+
+
+    @Target(ElementType.FIELD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Documented
+    public @interface Price {
+
+        String value() default "";
+
+        String currency() default "￥";
+    }
+
+    //@CustomDescription("手机分类")
+    public interface Category {
+        public abstract iPhone.Category.PhoneType getCategory();
+
+        enum PhoneType {
+            OLD, // /老人机
+            SMART // 智能机
+        }
+    }
+}
+
+
+
+@AbstractPhone.CustomDescription("抽象手机类AbstractPhone")
+public abstract class AbstractPhone implements Phone {
+    private String id;
+    private String name;
+
+    public AbstractPhone() {
+    }
+
+    public AbstractPhone(String id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    @Override
+    public String getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getSize() {
+        return "12cm*6cm";
+    }
+
+    public abstract void func();
+}
+
+
+
+/**
+ * 1、@CustomAttribute与@CustomAttributes
+ * 定义：注解@CustomAttribute上标注了元注解@Repeatable，@CustomAttribute的注解容器为@CustomAttributes；
+ * 使用单个@CustomAttribute注解时：getAnnotation()、getAnnotations()方法获取到的是@CustomAttribute。
+ * 同一个类上同时使用多个@CustomAttribute注解时：getAnnotation()、getAnnotations()获取到的是@CustomAttribute的注解容器@CustomAttributes。
+ *
+ * 2、@CustomDescription：
+ * 注解@CustomDescription上标注了元注解@Inherited，未标注@CustomRepeatable；
+ * 子类上使用@CustomDescription注解，子类上的属性会替换父类中@CustomDescription注解的所有属性值（覆盖/删除）
+ */
+//@CustomDescription("苹果手机") // 父类和子类中存在相同注解时@CustomDescription,获取到的是子类上的注解@CustomDescription
+//@CustomAttribute("粉红色")
+//@CustomAttribute("190g") // 注意：getAnnotation(CustomAttribute.class)获取到的是CustomAttributes注解
+public class iPhone extends AbstractPhone implements Phone, Phone.Category {
+
+    @Price(value = "5999")
+    private int price;
+
+    public iPhone() {
+        super("1001", "iphone 4");
+    }
+
+    @Override
+    public void func() {
+        System.out.println("打电话");
+        System.out.println("发短信");
+    }
+
+    public int getPrice() {
+        Field priceField = null;
+        try {
+            priceField = this.getClass().getDeclaredField("price");
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        }
+        assert priceField != null;
+        Price annotation = priceField.getAnnotation(Price.class);
+        return Integer.parseInt(annotation.value());
+    }
+
+    @Override
+    public javabase.domain.Phone.Category.PhoneType getCategory() {
+        return javabase.domain.Phone.Category.PhoneType.SMART;
+    }
+
+    @Override
+    public String getSize() {
+        return "6.1寸";
+    }
+
+    @CustomDescription("抽象手机类AbstractPhone")
+    abstract class AbstractPhone implements Phone {
+        private String id;
+        private String name;
+
+        public AbstractPhone() {
+        }
+
+        public AbstractPhone(String id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+
+        @Override
+        public String getId() {
+            return id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getSize() {
+            return "12cm*6cm";
+        }
+
+        public abstract void func();
+    }
+}
+
+
+说明：
+一、CountDownLatch、CyclicBarrier、Phaser、Semaphore的区别
+1、CountDownLatch
+（1）初始化一个计数 n
+（2）每调用一次countDown()方法，n值减1
+（3）线程A、B...调用await()方法，阻塞线程A、B...。
+（4）当计数值为0时，线程A、B...由 等待阻塞 -> 同步阻塞 -> 就绪态，等待获取处理机运行
+
+2、CyclicBarrier
+（1）多个线程互相等待，直到各线程到达同一个同步点，再继续一起执行。
+（2）CyclicBarrier适用于多个线程有固定的多步需要执行，线程间互相等待，当线程都执行完了，再执行下一步。
+（3）与CountDownLatch区别，CyclicBarrier可重用。
+
+3、Phaser
+（1）它与CountDownLatch和CyclicBarrier类似，都是等待一组线程完成工作后再执行下一步，协调线程的工作。
+（2）它支持任务在多个点都进行同步。
+（3）与CountDownLatch的区别，Phaser支持动态调整注册任务的数量。
+
+4、Semaphore
+（1）指定数量的信号量集，信号量可重用。类似pool，只不过Semaphore用于线程同步/异步，且手动调用指定方法获取和释放信号量。
+（2）通过acquire()获取一个信号量，release()释放一个信号量。
+
+
+二、uri和url各部分
+uri: <scheme>://<userinfo>@<host>:<port><path>?<query>#<fragment>
+<schemeSpecificPart> = //<userinfo>@<host>:<port><path>?<query>
+<authority> = <userinfo>@<host>:<port>
+<userinfo> = <username>:<password>
+
+url: <protocol>://<userinfo>@<host>:<port><path>?<query>#<ref>
+<authority> = <userinfo>@<host>:<port>
+<file> = <path>?<query>
+
+eg:
+file://root:123456@example.com:80/data?key=value&key2=value2#fragid1
+
+
+
+三、设计模式
+创建型：简单工厂模式、抽象工厂模式、单例模式、多例模式、构建者模式
+
+结构型：适配器、装饰器、代理模式、桥接模式、外观模式。
+
+-代理模式：代理模式在不改变原始类接口的条件下，为原始类定义一个代理类，主要目的是控制访问，而非加强功能，这是它跟装饰器模式最大的不同。
+-装饰器模式：装饰者模式在不改变原始类接口的情况下，对原始类功能进行增强，并且支持多个装饰器的嵌套使用。
+-适配器模式：适配器模式是一种事后的补救策略。适配器提供跟原始类不同的接口，而代理模式、装饰器模式提供的都是跟原始类相同的接口。
+-桥接模式：桥接模式的目的是将接口部分和实现部分分离，从而让它们可以较为容易、也相对独立地加以改变。桥接模式通过组合关系来替代继承关系，避免继承层次的指数级爆炸。
+
+代理、桥接、装饰器、适配器 4 种设计模式的区别:
+代理、桥接、装饰器、适配器，这 4 种模式是比较常用的结构型设计模式。它们的代码结构非常相似。笼统来说，它们都可以称为 Wrapper 模式，也就是通过 Wrapper 类二次封装原始类。
+
+行为型：策略模式、责任链模式、观察者模式、访问者模式
+
+
+四、数据库隔离级别
+脏读：本SESSION-1读到SESSION-2在INSERT,DELETE,UPDATE操作后未提交的数据。
+不可重复读：本SESSION-1第一次读取数据，而后SESSION-2又进行了UPDATE,DELETE,INSERT操作并提交数据，当SESSION-1第二次读取数据时，发现第二次读的数据与第一次读的数据不同(即，SESSION-1读取到了两次查询中间时段SESSION-2在UPDATE,DELETE,INSERT操作后提交的数据)。
+幻读：本SESSION-1第一次读取数据，而后SESSION-2又进行了INSERT操作并提交数据，再之后SESSION-1刚好碰巧对SESSION-2新插入的数据UPDATE操作后进行了第二次读取数据，结果发现第二次读的数据比第一次多(即，SESSION-1读取到了两次查询中间时段SESSION-2在INSERT操作后提交的数据)。
+
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; -- 可解决脏读问题
+SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; -- 可解决脏读、不可重复读中DELETE、UPDATE，及本SESSION在未进行UPDATE操作下其他SESSION因INSERT操作引起的读问题
+SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;	-- 可解决脏读、不可重复读、幻读问题
+
+
