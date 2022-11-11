@@ -1,0 +1,625 @@
+public class BIO {
+    /**
+     * class 01
+     *
+     * BIO模式下，工作线程A等待读取Stream中的内容。直接与Stream交互。
+     * 工作线程A从SocketA连接完成开始，便一直处于阻塞状态，直到Stream中数据准备好了才会被唤醒处理数据。
+     * 工作线程A阻塞等待SocketA中的数据，也就不能去处理其他数据已经准备好但没线程处理的SocketB。
+     */
+    class BioSocketServer {
+        public void main(String[] args) throws Exception {
+            // 监听指定的端口
+            int port = 50000;
+            ServerSocket server = new ServerSocket(port);
+
+            ExecutorService executorService = new ThreadPoolExecutor(1, 2, 1L, TimeUnit.SECONDS,
+                    new ArrayBlockingQueue<>(1), Executors.defaultThreadFactory(),
+                    new ThreadPoolExecutor.DiscardPolicy());
+
+            System.out.println("服务器启动成功！");
+            while (true) {
+                Socket socket = server.accept(); // 调用accept()后线程将阻塞，直到有客户端连接
+                System.out.println("新socket连接: " + socket);
+                if (socket != null) {
+                    executorService.submit(new BioWorkerThread(socket));
+                }
+            }
+
+        }
+    }
+
+    /**
+     * class 02
+     *
+     * BIO模式下，工作线程A等待读取Stream中的内容。直接与Stream交互。
+     * 工作线程A从SocketA连接完成开始，便一直处于阻塞状态，直到Stream中数据准备好了才会被唤醒处理数据。
+     * 工作线程A阻塞等待SocketA中的数据，也就不能去处理其他数据已经准备好但没线程处理的SocketB。
+     *
+     */
+    class BioWorkerThread implements Runnable {
+        private final Socket socket;
+        private final StringBuilder sb = new StringBuilder();
+
+        public BioWorkerThread(Socket socket) {
+            this.socket = socket;
+        }
+
+        @Override
+        public void run() {
+            InputStream is = null;
+            try {
+                is = socket.getInputStream();
+                byte[] buff = new byte[1024];
+                int len;
+                String msg = "";
+                while ((len = is.read(buff)) != -1) {
+                    msg = new String(buff, 0, len, StandardCharsets.UTF_8);
+                    System.out.println(msg);
+                    sb.append(msg); // 记录发送的数据
+                    if (msg.equals("bye")) {
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                System.out.println(sb); // 打印所有发送的数据
+                Netty.IOUtil.closeStream(is);
+                Netty.IOUtil.closeSocket(socket);
+            }
+        }
+    }
+}
+
+
+
+public class Netty {
+    // ----------------------case1-----------------------------------
+    /**
+     * class 01
+     * Reactor多线程模型：三种角色(Reactor、Acceptor、Worker)
+     * 1）由一个专门的Acceptor线程监听服务端指定端口，接收客户端的TCP连接请求；
+     * 2）网络IO操作-读、写等由一个NIO线程池负责，线程池可以采用标准的JDK线程池实现，它包含一个任务队列和N个可用的NIO线程，由这些NIO线程负责消息的读取、解码、编码和发送；
+     * 3）1个Worker线程可以同时处理N条链路，但是1个链路只对应1个Worker线程，防止发生并发操作问题。
+     *
+     *
+     * Worker多线程注意事项：不能简单的在主线程(Acceptor线程)中使用Worker线程池中的线程去处理已经就绪的Channel中的数据。
+     * 原因：假设线程池中的线程A正在处理分配给它的channelA中的数据且并未处理完，此时主线程中循环调用的Selector.select()会重复查询到未处理完的channelA对应的key，
+     * 然后又将channelA分配给线程B去处理，导致channelA的数据重复处理。
+     *
+     * 多worker线程应该为每个worker线程创建一个独立的Selector,并将分配给worker线程处理的通道注册到属于这个worker线程的Selector中。
+     *
+     * @author yl
+     * @since 2022-08-17 14:39
+     */
+    class MyNioServerBootstrap1 {
+
+        public void main(String[] args) throws IOException {
+            int nThread = 1;
+            new MyNioServerBootstrap1().start(nThread);
+        }
+
+        public void start(int nThread) throws IOException {
+            ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+            serverSocketChannel.configureBlocking(false); // 设置通道为非阻塞
+
+            ServerSocket serverSocket = serverSocketChannel.socket(); // 通过通道ServerSocketChannel获取一个ServerSocket
+            serverSocket.bind(new InetSocketAddress(50001)); // ServerSocket绑定监听50001端口
+
+            Selector selector = Selector.open(); // 创建一个Selector
+            // 将ServerSocketChannel注册到Selector中，并设置监听Socket连接准备好事件
+            serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+
+            MyWorkerGroup workerGroup = new MyWorkerGroup(nThread);
+            MyReactorAndAcceptor myReactorAndAcceptor = new MyReactorAndAcceptor(workerGroup, selector);
+            myReactorAndAcceptor.start();
+
+            System.out.println("服务启动成功!");
+        }
+    }
+
+    /**
+     * class 02
+     * Acceptor的连接分发功能整合在Reactor对象中
+     *
+     * @author yl
+     * @since 2022-08-24 11:34
+     */
+    class MyReactorAndAcceptor {
+        private final MyWorkerGroup workerGroup;
+        private final Selector selector;
+
+        public MyReactorAndAcceptor(MyWorkerGroup workerGroup, Selector selector) {
+            this.workerGroup = workerGroup;
+            this.selector = selector;
+        }
+
+        public void start() {
+            while (true) {
+                try {
+                    selector.select(); // 线程阻塞，直到有新连接或注册在Selector的通道完成了IO操作才会被唤醒。返回值为目前完成了IO操作的通道数量。
+
+                    Set<SelectionKey> selectionKeys = selector.selectedKeys(); // 获取目前到达指定事件（如，完成了IO
+                    // 操作）的通道对应的SelectionKey
+
+                    Iterator<SelectionKey> iterator = selectionKeys.iterator();
+                    while (iterator.hasNext()) { // 遍历目前完成了IO操作的通道对应的SelectionKey
+                        SelectionKey key = iterator.next();
+
+                        if (key.isAcceptable()) {
+                            ServerSocketChannel server = (ServerSocketChannel) key.channel();
+
+                            SocketChannel socketChannel = server.accept(); // 创建Socket的连接通道
+
+                            socketChannel.configureBlocking(false);
+
+                            MyNioWorker worker = workerGroup.next();
+                            worker.registry(socketChannel, SelectionKey.OP_READ);
+
+                            // 注意：调用Selector.select()后会阻塞，直到注册在Selector中的有通道到达某个状态(如：连接准备好，通道可读等)后才会被唤醒。
+                            // 由于worker线程调用select()时还没有channel被注册到Selector中，所以在select()
+                            //方法调用后work线程将一直处于阻塞状态，无法通过后面注册的通道唤醒。
+                            // 因此，在将第一个通道注册到Worker线程的Selector中后，需要手动调用Selector.wakeup()
+                            //唤醒Selector，以便持续监听注册在该Selector中的通道事件。
+                            worker.getSelector().wakeup();
+                        }
+                        iterator.remove();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+    // ----------------------case1-----------------------------------
+
+
+    // ----------------------case2-----------------------------------
+    /**
+     * class 03
+     * Acceptor对象：
+     * 与Reactor共用一个线程。有一个ServerSocketChannel和一个Worker线程组。
+     * 每有一个新socket连接准备好时，MyAcceptor对象就会调用一次doDispatch()方法，用于将这个连接准备好的socket注册到Worker线程中。
+     *
+     * @author yl
+     * @since 2022-08-24 11:34
+     */
+    class MyAcceptor {
+        private final MyWorkerGroup workerGroup;
+        private final ServerSocketChannel serverSocketChannel;
+
+        public MyAcceptor(MyWorkerGroup workerGroup, ServerSocketChannel serverSocketChannel) {
+            this.workerGroup = workerGroup;
+            this.serverSocketChannel = serverSocketChannel;
+        }
+
+        /**
+         * 每有一个新socket连接准备好时，MyAcceptor对象就会调用一次doDispatch()方法，用于将这个连接准备好的socket注册到Worker线程中。
+         */
+        public void doDispatch() {
+            try {
+                SocketChannel socketChannel = serverSocketChannel.accept(); // 创建Socket的连接通道
+
+                socketChannel.configureBlocking(false);
+
+                MyNioWorker worker = workerGroup.next();
+                worker.registry(socketChannel, SelectionKey.OP_READ);
+
+                // 注意：调用Selector.select()后会阻塞，直到注册在Selector中的有通道到达某个状态(如：连接准备好，通道可读等)后才会被唤醒。
+                // 由于worker线程调用select()时还没有channel被注册到Selector中，所以在select()方法调用后work线程将一直处于阻塞状态，无法通过后面注册的通道唤醒。
+                // 因此，在将第一个通道注册到Worker线程的Selector中后，需要手动调用Selector.wakeup()唤醒Selector，以便持续监听注册在该Selector中的通道事件。
+                worker.getSelector().wakeup();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * class 04
+     * Reactor对象：
+     *   单线程，专门用于处理新的socket连接。
+     *   每有一个新socket连接准备好时，MyAcceptor对象就会调用一次doDispatch()方法，将这个连接准备好的socket注册到Worker线程中。
+     *
+     * @author yl
+     * @since 2022-08-24 15:29
+     */
+    class MyReactor {
+        private final Selector selector;
+
+        public MyReactor(Selector selector) {
+            this.selector = selector;
+        }
+
+        public void run() {
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    selector.select(); // 线程阻塞，直到有新连接准备好了才会被唤醒。
+                    Set<SelectionKey> selectionKeys = selector.selectedKeys();
+
+                    Iterator<SelectionKey> iterator = selectionKeys.iterator();
+                    while (iterator.hasNext()) {
+                        SelectionKey key = iterator.next();
+                        dispatch(key);
+                        iterator.remove();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        public void dispatch(SelectionKey key) {
+            // 在serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT, acceptor)语句中给serverSocketChannel的SelectionKey绑定了一个Acceptor对象，
+            // 所以可以在这里通过SelectionKey.attachment()获取到Acceptor这个对象。
+            MyAcceptor myAcceptor = (MyAcceptor) key.attachment(); // 获取与SelectionKey绑定的对象。
+            if (myAcceptor != null) {
+                myAcceptor.doDispatch(); // 手动调用Acceptor.dispatch方法，该方法中会将准备好的连接注册到Worker线程中。
+            }
+        }
+    }
+
+    /**
+     * class 05
+     * Reactor多线程模型：三种角色(Reactor、Acceptor、Worker)
+     * 1）由一个专门的Acceptor线程监听服务端指定端口，接收客户端的TCP连接请求；
+     * 2）网络IO操作-读、写等由一个NIO线程池负责，线程池可以采用标准的JDK线程池实现，它包含一个任务队列和N个可用的NIO线程，由这些NIO线程负责消息的读取、解码、编码和发送；
+     * 3）1个Worker线程可以同时处理N条链路，但是1个链路只对应1个Worker线程，防止发生并发操作问题。
+     *
+     *
+     * Worker多线程注意事项：不能在主线程(Acceptor线程)中分配Worker线程池中的线程去处理已经就绪的Channel中的数据。
+     * 原因：假设线程池中的线程A正在处理分配给它的channelA中的数据但还没处理完，此时主线程中循环调用的Selector.select()会重复查询到未处理完的channelA对应的key，
+     * 然后又将channelA分配给线程B去处理，导致channelA的数据重复处理。
+     *
+     * 多worker线程应该为每个worker线程创建一个独立的Selector,并将要分配给这个worker线程处理的通道注册到专属于这个worker线程的Selector中。
+     *
+     * @author yl
+     * @since 2022-08-17 14:39
+     */
+    class MyNioServerBootstrap2 {
+
+        public void main(String[] args) throws IOException {
+            int nThread = 1;
+            new MyNioServerBootstrap2().start(nThread);
+        }
+
+        public void start(int nThread) throws IOException {
+            ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+            serverSocketChannel.configureBlocking(false); // 设置通道为非阻塞
+
+            ServerSocket serverSocket = serverSocketChannel.socket(); // 通过通道ServerSocketChannel获取一个ServerSocket
+            serverSocket.bind(new InetSocketAddress(50001)); // ServerSocket绑定监听50001端口
+
+            Selector selector = Selector.open(); // 创建一个Selector
+
+            MyWorkerGroup workerGroup = new MyWorkerGroup(nThread);
+            MyAcceptor myAcceptor = new MyAcceptor(workerGroup, serverSocketChannel);
+
+            // 将ServerSocketChannel注册到Selector中，同时将Acceptor绑定到serverSocketChannel对应的SelectionKey上
+            serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT, myAcceptor);
+
+            new MyReactor(selector).run();
+            System.out.println("服务启动成功!");
+        }
+    }
+    // ----------------------case2-----------------------------------
+
+
+    /**
+     * class 06
+     * NIO模式下，工作线程A与Stream之间有一个ChannelA。工作线程读写数据是与Channel关联的缓存进行存取。
+     * Channel会注册到一个Selector中，通过轮询所有注册在Selector中的Channel，查询所有已准备好了数据的Channel，然后让工作线程处理Channel中已经准备好了的数据。
+     * 如果ChannelA在还在准备数据，工作线程A还未分配去处理ChannelA中的数据，此时就可以让工作线程A去处理另一个已经准备好数据了的ChannelB。
+     *
+     * @author yl
+     * @since 2022-08-18 10:57
+     */
+    static class MyNioWorker {
+        private final String workerName;
+        private final Selector selector;
+        private final LinkedBlockingDeque<SocketChannel> socketChannels;
+        private final Executor executor;
+        private final StringBuilder sb = new StringBuilder();
+        private final ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+        private boolean isStarted = false;
+
+
+        public MyNioWorker(String workerName, Selector selector, Executor executor) {
+            this.workerName = workerName;
+            this.selector = selector;
+            this.socketChannels = new LinkedBlockingDeque<>();
+            this.executor = executor;
+        }
+
+        public Selector getSelector() {
+            return selector;
+        }
+
+        public void registry(SocketChannel socketChannel, int ops) {
+//        System.out.println(this.workerName + " - " + this.selector + " " + socketChannel.socket());
+
+        /*
+        为什么不直接把注册操作放在这里？
+        答：把注册放在这里做的话，用的是主线程处理，这样主线程需要花费大量时间去处理注册操作，从而降低创建socket连接的效率。
+            好的做法是把注册操作放到Worker线程中去处理。
+         */
+            // socketChannel.register(selector, SelectionKey.OP_READ); // 把注册放在这里做的话，用的是主线程处理，而不是Worker线程处理
+
+            socketChannels.add(socketChannel);
+
+            if (!isStarted) {
+                isStarted = true;
+                executor.execute(this::run);
+            }
+        }
+
+
+        public void run() {
+            while (true) {
+                try {
+                    int select = selector.select();
+                    if (select > 0) { // // 处理已经注册在Selector中，且数据准好了的通道
+                        Set<SelectionKey> selectionKeys = selector.selectedKeys();
+                        Iterator<SelectionKey> iterator = selectionKeys.iterator();
+                        while (iterator.hasNext()) {
+                            SelectionKey key = iterator.next();
+                            iterator.remove();
+                            processKey(key);
+                        }
+                    } else { // 将新通道注册到Selector中
+                        while (!socketChannels.isEmpty()) {
+                            SocketChannel channel = socketChannels.take();
+                            System.out.println(workerName + " 新通道注册 " + channel);
+                            channel.register(selector, SelectionKey.OP_READ);
+                        }
+                    }
+                } catch (IOException | InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        public void processKey(SelectionKey key) throws IOException {
+            int len = 0;
+            if (key.isReadable()) {
+                SocketChannel socketChannel = (SocketChannel) key.channel();
+
+//                            ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+
+                while ((len = socketChannel.read(byteBuffer)) != -1) {
+                    if (len > 0) {
+                        sb.append(new java.lang.String(byteBuffer.array(), 0, len, StandardCharsets.UTF_8));
+                        byteBuffer.clear();
+                    } else {
+                        break;
+                    }
+                }
+                System.out.println("收到客户端消息：" + sb);
+                if (sb.toString().equals("bye")) {
+                    System.out.println(workerName + " 断开通道连接 " + socketChannel.socket());
+                    socketChannel.close();
+                }
+                sb.delete(0, sb.length());
+            }
+        }
+    }
+
+    /**
+     * class 07
+     * Worker线程池
+     *
+     * @author yl
+     * @since 2022-08-23 17:03
+     */
+    static class MyWorkerGroup {
+        private static final AtomicInteger idx = new AtomicInteger(0);
+        private static int threadNum;
+        private static final List<MyNioWorker> workers = new ArrayList<>();
+
+        public MyWorkerGroup(int nThread) throws IOException {
+            threadNum = nThread;
+            for (int i = 1; i <= nThread; i++) {
+                Selector selector = Selector.open(); // 每个Worker线程都应有数据一个独属于自己的Selector对象。
+                MyNioWorker worker = new MyNioWorker("worker" + i, selector, new MyEventExecutor());
+                workers.add(worker);
+            }
+        }
+
+        public MyNioWorker next() {
+            return workers.get(idx.getAndIncrement() % threadNum);
+        }
+
+        class MyEventExecutor implements Executor {
+            @Override
+            public void execute(Runnable command) {
+                new Thread(command).start();
+            }
+        }
+    }
+
+
+    // ----------------------case3-----------------------------------
+    /**
+     * class 08
+     * Reactor单线程模型，指的是Reactor、Acceptor、Worker三角色的操作都由同一个线程完成，这个线程的职责如下：
+     * 1）作为NIO服务端，接收客户端的TCP连接；
+     * 2）作为NIO客户端，向服务端发起TCP连接；
+     * 3）读取通信对端的请求或者应答消息；
+     * 4）向通信对端发送消息请求或者应答消息。
+     *
+     * @author yl
+     * @since 2022-08-17 14:39
+     */
+    class NioServerOneThread {
+
+        public void main(String[] args) throws IOException {
+            int len;
+            ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+            StringBuilder sb = new StringBuilder();
+
+            ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+
+            ServerSocket serverSocket = serverSocketChannel.socket(); // 通过通道ServerSocketChannel获取一个ServerSocket
+            serverSocket.bind(new InetSocketAddress(50001)); // ServerSocket绑定监听50001端口
+
+            serverSocketChannel.configureBlocking(false); // 设置通道为非阻塞
+            Selector selector = Selector.open(); // 创建一个Selector
+            serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT); // 将ServerSocketChannel注册到Selector
+            // 中，并设置监听Socket连接准备好事件
+
+            System.out.println("服务启动成功!");
+            while (true) {
+                int select = selector.select(); // 此方法调用后，会阻塞当前线程，直到注册在Selector的通道有完成了IO操作才会被唤醒。返回值为目前完成了IO操作的通道数量。
+
+                Set<SelectionKey> selectionKeys = selector.selectedKeys(); // 获取目前到达指定事件（如，完成了IO操作）的通道对应的SelectionKey
+
+                Iterator<SelectionKey> iterator = selectionKeys.iterator();
+                while (iterator.hasNext()) { // 遍历目前完成了IO操作的通道对应的SelectionKey
+                    SelectionKey key = iterator.next();
+
+                    // Socket Channel处理流程：
+                    // 1、Acceptable状态(客户端有新Socket准备好可以连接时)：创建Socket的连接通道，并将这个通过注册到Selector中。
+                    // 2、Readable状态(Socket完成流数据传输)：到达Readable状态，创建工作线程去处理这些数据。
+
+                    if (key.isAcceptable()) { // 处理Acceptable状态Channel
+                        //每当客户端有新Socket连接事件准备就绪，ServerSocketChannel中都会有Acceptable事件，故会多次获取同一个ServerSocketChannel对象
+                        ServerSocketChannel server = (ServerSocketChannel) key.channel();
+
+                        SocketChannel socketChannel = server.accept(); // 创建Socket的连接通道
+                        socketChannel.configureBlocking(false);
+                        socketChannel.register(selector, SelectionKey.OP_READ); // 将这个通过注册到Selector
+
+                        System.out.println("新连接channel socket " + socketChannel.socket());
+                    } else if (key.isReadable()) {
+                        // 处理Readable状态Channel
+
+                        SocketChannel socketChannel = (SocketChannel) key.channel();
+
+                        while ((len = socketChannel.read(byteBuffer)) != -1) {
+                            if (len > 0) {
+                                String msg = new String(byteBuffer.array(), 0, len, StandardCharsets.UTF_8);
+                                sb.append(msg);
+                                byteBuffer.clear();
+                            } else {
+                                break;
+                            }
+                        }
+                        System.out.println("接收到消息：" + sb);
+
+                        if (sb.toString().equals("bye")) {
+                            System.out.println("断开连接 " + socketChannel.socket());
+                            socketChannel.close();
+                        }
+                        sb.delete(0, sb.length());
+
+                    }
+                    // 本次事件集合中处理完的key要及时删除，不然下次selectionKeys中还会有这个已处理事件的key，最后导致事件重复处理。
+                    // 注意：只有处理完了，再从集合中删除这个selectionKey下次才不会再次检索到。如果没有处理完，就删除这个selectionKey，下次调用selectionKeys.iterator()
+                    // 还会检索到这个没处理完的selectionKey
+                    iterator.remove();
+                }
+
+            }
+        }
+    }
+
+    /**
+     * class 09
+     * 简单NIO服务器
+     *
+     * @author yl
+     * @since 2022-08-17 10:58
+     */
+    static class SimpleNioServerDemo {
+
+        private static List<SocketChannel> channelList = new ArrayList<>();
+
+        public static void main(String[] args) throws IOException {
+            // 创建NIO serverSocketChannel ，与BIO的serverSocket 类似
+            ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+            serverSocketChannel.socket().bind(new InetSocketAddress(9000));
+            // 设置ServerSocketChannel非阻塞
+            serverSocketChannel.configureBlocking(false);
+            while(true){
+                // 非阻塞模式accept方法不会阻塞， 否则会阻塞
+                // NIO的非阻塞是有操作系统内部实现的，底层调用了Linux内核的accept函数
+                SocketChannel socketChannel = serverSocketChannel.accept();
+                if (socketChannel!=null){
+                    System.out.println("连接成功");
+                    //    设置SocketChannel为非阻塞
+                    socketChannel.configureBlocking(false);
+                    channelList.add(socketChannel);
+                }
+
+                Iterator<SocketChannel> iterator = channelList.iterator();
+                while (iterator.hasNext()){
+                    SocketChannel sc=iterator.next();
+                    ByteBuffer byteBuffer = ByteBuffer.allocate(128);
+                    // 非阻塞模式 read 方法不会阻塞，否则会阻塞
+                    int len = sc.read(byteBuffer);
+                    if (len > 0) {
+                        System.out.println("接受到消息： " + new String(byteBuffer.array()));
+                    } else if (len == -1) { // 如果客户端断开, 把socket从集合中去掉
+                        iterator.remove();
+                        System.out.println("客户端断开连接");
+                    }
+                }
+            }
+        }
+    }
+    // ----------------------case3-----------------------------------
+
+
+    /**
+     * class 10
+     */
+    static class IOUtil {
+        public static void closeStream(Closeable stream) {
+            try {
+                if (stream != null) {
+                    stream.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        }
+
+        public static void closeSocket(Socket socket) {
+            try {
+                if (socket != null) {
+                    socket.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * class 11
+     */
+    class SocketClient {
+        public void main(String args[]) throws Exception {
+            // 要连接的服务端IP地址和端口
+            String host = "127.0.0.1";
+//        int port = 50000; // BIO
+            int port = 50001; // NIO
+//        int port = 50002; // Netty
+
+            // 与服务端建立连接
+            Socket socket = new Socket(host, port);
+            OutputStream outputStream = socket.getOutputStream(); // 获得输出流
+
+            String msgSend;
+            Scanner sc = new Scanner(System.in);
+            do {
+                msgSend = sc.next();
+                outputStream.write(msgSend.getBytes(StandardCharsets.UTF_8));
+                outputStream.flush();
+            } while (!msgSend.equals("bye"));
+            IOUtil.closeStream(outputStream);
+            IOUtil.closeSocket(socket);
+        }
+    }
+}
