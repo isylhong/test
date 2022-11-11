@@ -1,0 +1,597 @@
+public class BeanInfoTest {
+    @Test
+    public void testPropertyEditor() {
+        Employee employee = new Employee(); // 初始化一个空实例(未给任何属性赋值)
+        EmployeeBeanInfo employeeBeanInfo = new EmployeeBeanInfo(); // 创建Employee的自定义BeanInfo
+
+        HashMap<String, String> map = new HashMap<>(); // 字符串形式的属性键值对
+        map.put("employeeNumber", "222333");
+        map.put("salary", "6000");
+        map.put("department", "IT运维部,2");
+
+        System.out.println("赋值前：" + employee);
+        SimpleBeanWrapper beanWrapper = new SimpleBeanWrapper(employee);
+        beanWrapper.setPropertyValue(employeeBeanInfo, map);
+        System.out.println("赋值后：" + employee);
+    }
+
+    @Test
+    public void testBeanInfo() {
+        BeanInfo beanInfo = null;
+        try {
+            beanInfo = Introspector.getBeanInfo(Employee.class);
+        } catch (IntrospectionException e) {
+            e.printStackTrace();
+        }
+
+        assert beanInfo != null;
+        PropertyDescriptor[] propertyDescriptors = beanInfo.getPropertyDescriptors();
+        for (PropertyDescriptor pd : propertyDescriptors) {
+            String name = pd.getName();
+            String displayName = pd.getDisplayName();
+            String shortDescription = pd.getShortDescription();
+            Method readMethod = pd.getReadMethod();
+            Method writeMethod = pd.getWriteMethod();
+            Class<?> propertyType = pd.getPropertyType();
+            Class<?> propertyEditorClass = pd.getPropertyEditorClass();
+
+            System.out.println("name: " + name);
+            System.out.println("displayName: " + displayName);
+            System.out.println("shortDescription: " + shortDescription);
+            System.out.println("readMethod: " + readMethod);
+            System.out.println("writeMethod: " + writeMethod);
+            System.out.println("propertyType: " + propertyType);
+            System.out.println("propertyEditorClass: " + propertyEditorClass);
+            System.out.println();
+        }
+    }
+
+    /**
+     * class 01
+     */
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Getter
+    @Setter
+    @ToString
+    public class Department {
+        private String name;
+        private byte level; // 部门层级
+    }
+
+    /**
+     * class 02
+     */
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Setter
+    @Getter
+    @ToString
+    public class Employee {
+        private String employeeNumber;
+        private double salary;
+        private Department department;
+    }
+
+    /**
+     * class 03
+     */
+    public class EmployeeNumberPropertyEditor extends PropertyEditorSupport {
+
+        @Override
+        public String getAsText() {
+            return super.getAsText();
+        }
+
+        @Override
+        public void setAsText(String text) throws IllegalArgumentException {
+            if (text == null || text.equals("")) {
+                throw new IllegalArgumentException("设置的字符串格式不正确");
+            }
+            StringBuilder sb = new StringBuilder(text);
+            int length = text.length();
+            if (length < 8) {
+                for (int i = 0; i < 8 - length; i++) {
+                    sb.insert(0, '0');
+                }
+            }
+            super.setValue(sb.toString()); // 将不是8位数值的工号通过加数前加0补足8位保存
+        }
+    }
+
+    /**
+     * class 04
+     */
+    public class EmployeeSalaryPropertyEditor extends PropertyEditorSupport {
+
+        @Override
+        public String getAsText() {
+            return super.getAsText();
+        }
+
+        @Override
+        public void setAsText(String text) throws IllegalArgumentException {
+            if (text == null || text.equals("")) {
+                throw new IllegalArgumentException("设置的字符串格式不正确");
+            }
+            super.setValue(Double.parseDouble(text));
+        }
+    }
+
+    /**
+     * class 05
+     */
+    public class EmployeeDepartmentPropertyEditor extends PropertyEditorSupport {
+
+        @Override
+        public void setAsText(String text) throws IllegalArgumentException {
+            if(text == null || !text.contains(",")){
+                throw new IllegalArgumentException("设置的字符串格式不正确");
+            }
+            String[] infos = text.split(",");
+            Department department = new Department();
+            department.setName(infos[0]);
+            department.setLevel(Byte.parseByte(infos[1]));
+
+            //2. 调用父类的setValue()方法设置转换后的属性对象
+            setValue(department);
+        }
+    }
+
+    /**
+     * class 06
+     */
+    public class EmployeeBeanInfo extends SimpleBeanInfo {
+
+        @Override
+        public PropertyDescriptor[] getPropertyDescriptors() {
+            try {
+                //1. 将EmployeeNumberPropertyEditor绑定到Employee的employeeNumber属性中
+                PropertyDescriptor idDescriptor = new PropertyDescriptor("employeeNumber", Employee.class);
+                idDescriptor.setPropertyEditorClass(EmployeeNumberPropertyEditor.class);
+                //2. 将EmployeeSalaryPropertyEditor绑定到Employee的salary属性中
+                PropertyDescriptor salaryDescriptor = new PropertyDescriptor("salary", Employee.class);
+                salaryDescriptor.setPropertyEditorClass(EmployeeSalaryPropertyEditor.class);
+                //3. 将EmployeeDepartmentPropertyEditor绑定到Employee的department属性中
+                PropertyDescriptor departmentDescriptor = new PropertyDescriptor("department", Employee.class);
+                departmentDescriptor.setPropertyEditorClass(EmployeeDepartmentPropertyEditor.class);
+
+                return new PropertyDescriptor[]{idDescriptor, salaryDescriptor, departmentDescriptor};
+            } catch (IntrospectionException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+    }
+
+    /**
+     * class 07
+     */
+    @NoArgsConstructor
+    @Getter
+    @Setter
+    public class SimpleBeanWrapper {
+        private Object wrappedObject;
+        private Class<?> rawType;
+
+        public SimpleBeanWrapper(Object instance) {
+            this.wrappedObject = instance;
+            this.rawType = instance.getClass();
+        }
+
+        public void setPropertyValue(BeanInfo beanInfo, Map<String, String> values) {
+            // 1、获取自定义的PropertyDescriptor
+            PropertyDescriptor[] propertyDescriptors = beanInfo.getPropertyDescriptors();
+            // 2、构建一个Map存储每一个属性相关信息
+            HashMap<String, PropertyHolder> propertyHolders = new HashMap<>();
+            for (PropertyDescriptor pd : propertyDescriptors) {
+                propertyHolders.put(pd.getName(), createPropertyHolder(pd));
+            }
+
+            // 3、遍历属性字符串键值对，将字符串值转换为目标类型值，然后赋值给实例对象
+            Set<Map.Entry<String, String>> entries = values.entrySet();
+            for (Map.Entry<String, String> entry : entries) {
+                PropertyHolder propertyHolder = propertyHolders.get(entry.getKey());
+                try {
+                    // 1. 通过自定义PropertyEditor将字符串值转换属性目标类型值
+                    propertyHolder.propertyEditor.setAsText(entry.getValue());
+                    // 2. 获取经自定义PropertyEditor转换后的属性值
+                    Object convertedValue = propertyHolder.propertyEditor.getValue();
+                    // 3. 通过反射将转换值赋值给实例对象
+                    propertyHolder.writeMethod.invoke(this.wrappedObject, convertedValue);
+                } catch (IllegalAccessException | InvocationTargetException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+
+        public PropertyHolder createPropertyHolder(PropertyDescriptor pd) {
+            return pd != null ? new PropertyHolder(pd) : null;
+        }
+
+        class PropertyHolder {
+            private String name;
+            private Class<?> type;
+            private Method readMethod;
+            private Method writeMethod;
+            private PropertyDescriptor pd;
+            private PropertyEditor propertyEditor;
+
+            public PropertyHolder(PropertyDescriptor pd) {
+                this.pd = pd;
+                this.name = pd.getName();
+                this.type = pd.getPropertyType();
+                this.readMethod = pd.getReadMethod();
+                this.writeMethod = pd.getWriteMethod();
+                try {
+                    this.propertyEditor = (PropertyEditor) pd.getPropertyEditorClass().newInstance();
+                } catch (InstantiationException | IllegalAccessException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+}
+
+
+
+
+/**
+ * 队尾添加元素：add()、offer()、put()
+ * 获取队头元素并删除：remove()、poll()、take()
+ * 获取队头元素不删除：element()、peek()
+ */
+public class BlockQueueTest {
+    /**
+     * 执行失败抛异常组合：add()、remove()、element()
+     * add：队满，添加失败，抛异常(IllegalStateException)。
+     * remove：队列为空，获取失败，抛异常(NoSuchElementException)。
+     * element()：队列为空，获取失败，抛异常(NoSuchElementException)。
+     */
+    @Test
+    public void testAddRemoveElement() {
+        ArrayBlockingQueue<String> queue = new ArrayBlockingQueue<>(1);
+
+        boolean isSuccess = queue.add("item1");
+        System.out.println(isSuccess);
+//        queue.add("item1"); // IllegalStateException: Queue full
+
+        String element = queue.element();
+        System.out.println(element);
+
+//        String remove = queue.remove();
+//        System.out.println(remove);
+//        queue.remove(); // NoSuchElementException
+
+        queue.element(); // NoSuchElementException
+    }
+
+    /**
+     * 执行失败不抛异常组合：offer()、poll()、peek()
+     * offer()：// 队满，添加失败，返回false。
+     * poll()：// 队列为空，获取失败，返回null。
+     * peek()：// 队列为空，获取失败，返回null。
+     */
+    @Test
+    public void testOfferPollPeek() {
+        ArrayBlockingQueue<String> queue = new ArrayBlockingQueue<>(1);
+
+        boolean isSuccess = queue.offer("item1");
+        System.out.println(isSuccess);
+        System.out.println(queue.offer("item2")); // 队满，添加失败，返回false
+
+        String peek = queue.peek();
+        System.out.println(peek);
+
+        String poll = queue.poll();
+        System.out.println(poll);
+        System.out.println(queue.poll()); // 队列为空，获取失败，返回null
+
+        System.out.println(queue.peek()); // 队列为空，获取失败，返回null
+    }
+
+    /**
+     * 阻塞，可能抛异常组合：put()、take()
+     * put()：队满，阻塞，直到队列有空间存放新增元素
+     * take()：队空，阻塞，直到队列元素可获取
+     */
+    @Test
+    public void testPutTake() {
+        final Step step = new Step();
+        final ArrayBlockingQueue<String> queue = new ArrayBlockingQueue<>(1);
+
+        TimerTask takeTask = new TimerTask() {
+            @Override
+            public void run() {
+                try {
+                    String item = queue.take(); // ②
+                    System.out.println(step.stepTo("take <" + item + ">"));
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        TimerTask putTask = new TimerTask() {
+            @Override
+            public void run() {
+                try {
+                    queue.put("item3"); // ⑤
+                    System.out.println(step.stepTo("put <item3>"));
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        new Timer().schedule(takeTask, 1000L);
+        new Timer().schedule(putTask, 3000L);
+
+        try {
+            queue.put("item1"); // ①
+            System.out.println(step.stepTo("put <item1>"));
+
+            queue.put("item2"); // 队满，阻塞，直到队列有空间存放新增元素 ③
+            System.out.println(step.stepTo("put <item2>"));
+
+
+            String take = queue.take(); // ④
+            System.out.println(step.stepTo("take <" + take + ">"));
+
+            System.out.println(step.stepTo("take <" + queue.take() + ">")); // 队空，阻塞，直到队列元素可获取 ⑥
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    class Step {
+        private final AtomicInteger count = new AtomicInteger(0);
+
+        String stepTo(String info) {
+            return "第" + count.incrementAndGet() + "步: " + info;
+        }
+    }
+}
+
+
+
+/**
+ * 测试Class类方法
+ *
+ */
+public class ClassTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClassTest.class);
+
+    /**
+     * getDeclaringClass()：获取最后实现该方法的类对象
+     * 1) 父类方法在子类中被重写/实现，获取到是的子类Class对象
+     * 2) 父类方法没有在子类中被重载，获取到是的父类
+     *
+     */
+    @Test
+    public void testGetDeclaringClass() throws NoSuchMethodException {
+        Method getSizeMethod = iPhone.class.getMethod("getSize");  // 父类方法，在子类中重载
+        System.out.println(getSizeMethod.getDeclaringClass()); // com.autumn.learn.java8.domain.fruit.iPhone4
+
+        Method getSizeMethod1 = AbstractPhone.class.getMethod("getSize");
+        System.out.println(getSizeMethod1.getDeclaringClass());
+
+        Method getIdMethod = iPhone.class.getMethod("getId"); // 父类方法，未在子类中重载
+        System.out.println(getIdMethod.getDeclaringClass()); // com.autumn.learn.java8.domain.fruit.AbstractPhone
+    }
+
+    /**
+     * getInterfaces()
+     * 只能获取当前类实现的所有接口
+     * 1. 不能获取父类(祖父)中实现接口
+     * 2. 不能获取当前类实现接口继承的接口
+     * 3. XXX接口.getInterfaces()用于获取该接口继承的接口列表
+     */
+    @Test
+    public void testGetInterfaces() {
+
+        LOGGER.info(Arrays.asList(iPhone.class.getInterfaces()).toString());
+
+        LOGGER.info("");
+        LOGGER.info(Arrays.asList(AbstractPhone.class.getInterfaces()).toString());
+
+        LOGGER.info("");
+        LOGGER.info(Arrays.asList(Phone.class.getInterfaces()).toString()); // 获取该接口继承所有的接口列表
+    }
+
+    /**
+     * getSuperclass()、getGenericSuperclass() 的区别
+     * 同：两者都用于获取父类（使用extends关键字继承的类）；一个具体类(或抽象类)未使用extends继承其他类时，获取的父类是Object.class。
+     * 异：getSuperclass()无法获取到父类中泛型的具体类型，而getGenericSuperclass()却可以获取到父类中泛型的具体类型。
+     *
+     * 注意：
+     * 1) Object.class.getSuperclass()=null。
+     * 2) 无论接口有没有继承其他接口。即，接口.class.getSuperclass()=null。
+     * 3) 可通过getInterfaces()获取接口继承的接口。
+     */
+    @Test
+    public void testGetSuperClass() {
+        Class<UserDaoImpl> userDaoImplClass = UserDaoImpl.class;
+
+        Class<? super UserDaoImpl> superclass = userDaoImplClass.getSuperclass();
+        LOGGER.info("getSuperclass(): {}", superclass);
+
+        Type genericSuperclass = userDaoImplClass.getGenericSuperclass();
+        LOGGER.info("getGenericSuperclass(): {}", genericSuperclass);
+
+        // 获取泛型具体类型
+        ParameterizedType parameterizedType = (ParameterizedType) genericSuperclass;
+        Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
+        LOGGER.info("泛型的具体类型: {}", actualTypeArguments[0].getTypeName());
+    }
+
+    /**
+     * instanceof、isAssignableFrom() 的区别
+     * 1、变量A instanceof 类型B, 假设变量A所指的具体对象类型是C.
+     * true: B是C的父类(或祖父类)，或B.class==C.class,
+     * 2、A.getClass().isAssignableFrom(B.class)
+     * true: A.getClass()是B.class父类(或祖父类)，或A.class==B.class.
+     */
+    @Test
+    public void testIsAssignableFrom() {
+        Phone phone = new AbstractPhone() {
+            @Override
+            public void func() {
+            }
+        };
+
+        // 变量var instanceof 类型B
+        LOGGER.info("instanceof");
+        LOGGER.info(String.valueOf(phone instanceof Phone)); // true
+        LOGGER.info("{}", phone instanceof AbstractPhone); // true
+        LOGGER.info("{}", phone instanceof iPhone); // false
+
+        // xxxClass.isAssignableFrom(yyyClass)
+        LOGGER.info("isAssignableFrom()");
+        Class<AbstractPhone> abstractPhoneClass = AbstractPhone.class;
+        LOGGER.info("{}", abstractPhoneClass.isAssignableFrom(Phone.class)); // false
+        LOGGER.info("{}", abstractPhoneClass.isAssignableFrom(AbstractPhone.class)); // true
+        LOGGER.info("{}", abstractPhoneClass.isAssignableFrom(iPhone.class)); // true
+    }
+
+    /**
+     * 不同方法获取class name的区别
+     */
+    @Test
+    public void testGetClassname() {
+        Class<User> userClass = User.class;
+        String classTypeName = userClass.getTypeName(); // com.autumn.learn.java8.domain.User
+        LOGGER.info("type name: {}", classTypeName);
+        String className = userClass.getName(); // com.autumn.learn.java8.domain.User
+        LOGGER.info("name: {}", className);
+        String classSimpleName = userClass.getSimpleName(); // User
+        LOGGER.info("simple name: {}", classSimpleName);
+        String classCanonicalName = userClass.getCanonicalName(); // com.autumn.learn.java8.domain.User
+        LOGGER.info("canonical name: {}", classCanonicalName);
+    }
+
+    /**
+     * 三种方法获取Class对象
+     */
+    @Test
+    public void testGetClassObject() throws ClassNotFoundException {
+        // 方法一：xxxClass.class
+        Class<User> userClass1 = User.class;
+        LOGGER.info(userClass1.getName());
+
+        // 方法二：xxxObject.getClass()
+        User user = new User();
+        Class userClass2 = user.getClass();
+        LOGGER.info(userClass2.getName());
+
+        // 方法三：Class.forName(XXX类全限定名)
+        Class UserClass3 = Class.forName("com.autumn.learn.java8.domain.User");
+        LOGGER.info(UserClass3.getName());
+    }
+
+    /**
+     * class 01
+     */
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Getter
+    @Setter
+    @ToString
+    class User {
+        private String userId;
+        private String username;
+    }
+
+    /**
+     * class 02
+     */
+    class BaseDao<T> {
+        private String parameterizedTypeClassName;
+
+        public BaseDao() {
+        }
+
+        public void init() {
+            Type type = this.getClass().getGenericSuperclass(); // getGenericSuperclass(), 可用于获取泛型的具体类型 (可把使用泛型想象为继承父类)
+            if (type instanceof ParameterizedType) {
+                ParameterizedType parameterizedType = (ParameterizedType) type;
+                Type[] types = parameterizedType.getActualTypeArguments();
+                Class<T> clazz = (Class<T>) types[0];
+                parameterizedTypeClassName = clazz.getName();
+            }
+            System.out.println(this.getParameterizedTypeClassName());
+        }
+
+        public void setParameterizedTypeClassName(String parameterizedTypeClassName) {
+            this.parameterizedTypeClassName = parameterizedTypeClassName;
+        }
+
+        public String getParameterizedTypeClassName() {
+            return this.parameterizedTypeClassName;
+        }
+    }
+
+    /**
+     * class 03
+     */
+    class UserDaoImpl extends BaseDao<User> {
+        private final Logger LOGGER = LoggerFactory.getLogger(UserDaoImpl.class);
+
+        public UserDaoImpl() {
+        }
+
+
+        public void initInSubClass() {
+            Type type = getClass().getGenericSuperclass();
+            if (type instanceof ParameterizedType) {
+                ParameterizedType parameterizedType = (ParameterizedType) type;
+                LOGGER.info("ParameterizedType => {}", parameterizedType);
+                LOGGER.info("ParameterizedType.getRawType() => {}", parameterizedType.getRawType());
+                LOGGER.info("ParameterizedType.getActualTypeArguments() => {}",
+                        Arrays.asList(parameterizedType.getActualTypeArguments()));
+                Type[] types = parameterizedType.getActualTypeArguments();
+                super.setParameterizedTypeClassName(types[0].getTypeName());
+            }
+        }
+    }
+
+    /**
+     * class 04
+     */
+    public class GenericTest {
+        private final Logger LOGGER = LoggerFactory.getLogger(GenericTest.class);
+
+        /**
+         * 类BaseDao使用了泛型参数T。指定泛型参数类型，new一个BaseDao实例，无法通过 getGenericSuperclass() 获取到BaseDao中的泛型具体类型
+         */
+        @Test
+        public void superClassGenericTypeGetTest02() {
+            BaseDao<User> userBaseDao = new BaseDao<User>();
+            userBaseDao.init();
+            String parameterizedTypeClassName = userBaseDao.getParameterizedTypeClassName(); // null
+            LOGGER.info("指定泛型参数类型，直接new一个BaseDao实例，泛型具体类型为：{}", parameterizedTypeClassName);
+        }
+
+        /**
+         * 定义子类BaseDaoImpl继承BaseDao，并在子类定义中指定泛型参数T的具体类型。可通过 getGenericSuperclass() 获取到BaseDao中的泛型具体类型。
+         */
+        @Test
+        public void superClassGenericTypeGetTest() {
+            UserDaoImpl userDao = new UserDaoImpl();
+            userDao.initInSubClass();
+            String parameterizedTypeClassName = userDao.getParameterizedTypeClassName(); // com.autumn.java8.User
+            LOGGER.info("子类定义时指定父类泛型具体类型，new一个子类实例，泛型具体类型为：{}", parameterizedTypeClassName);
+        }
+
+
+        @Test
+        public void superClassGenericTypeGetTest2() {
+            UserDaoImpl userDao = new UserDaoImpl();
+            userDao.init();
+            String parameterizedTypeClassName = userDao.getParameterizedTypeClassName(); // com.autumn.java8.User
+            LOGGER.info("子类定义时指定父类泛型具体类型，new一个子类实例，泛型具体类型为：{}", parameterizedTypeClassName);
+        }
+
+    }
+
