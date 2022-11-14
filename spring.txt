@@ -1,0 +1,694 @@
+public class Spring {
+    // AOP------------------------------------------------------------------------------------------------
+    /*
+    applicationContext-Aop.xml
+    <!--    <context:component-scan base-package="com.autumn.learn.spring.aop"/>-->
+
+    <!-- 开启基于注解的AOP功能，作用等同于@EnableAspectJAutoProxy注解 -->
+    <!--    <aop:aspectj-autoproxy/>-->
+
+    <bean id="myService" class="com.autumn.learn.spring.aop.MyService"/>
+    <bean id="myAspect" class="com.autumn.learn.spring.aop.MyAspect"/>
+
+    <!-- 切面定义，两种方法
+    方法一：配置文件方式。配置文件中<aop:config>标签内定义PointCut、Advice、Aspect。
+    方法二：Java注解方式。使用@Aspect注解定义PointCut、Advice、Aspect。
+    -->
+    <aop:config>
+        <aop:pointcut id="myPointCut" expression="execution(public * com.autumn.learn.spring.aop.MyService.*(..))"/>
+        <aop:aspect ref="myAspect" order="1">
+            <aop:around method="aroundAdvice" pointcut-ref="myPointCut"/>
+            <aop:before method="beforeAdvice" pointcut-ref="myPointCut"/>
+            <aop:after method="afterAdvice" pointcut-ref="myPointCut"/>
+            <aop:after-returning method="afterReturningAdvice" pointcut-ref="myPointCut" returning="result"/>
+            <aop:after-throwing method="afterThrowingAdvice" pointcut-ref="myPointCut" throwing="e"/>
+        </aop:aspect>
+    </aop:config>
+     */
+
+    /**
+     * class 01
+     * 使用@Aspect注解定义切面
+     */
+    @Aspect
+    @Component
+    @Order(1)
+    public class MyAspectWithJavaAnnotation {
+
+        /**
+         * 定义切入点
+         */
+        @Pointcut("execution(public * com.autumn.learn.spring.aop.MyService.*(..))")
+        public void pointCut() {
+        }
+
+        /**
+         * 前置通知：目标方法调用前执行
+         */
+        @Before(value = "execution(public * com.autumn.learn.spring.aop.MyService.*(..))") // 直接在value中使用execution表达式
+        public void beforeAdvice(JoinPoint joinPoint) {
+            Signature signature = joinPoint.getSignature();
+            Object[] args = joinPoint.getArgs();
+            System.out.println("----- 前置通知 -----, signature: " + signature.toString() + ", args: " + Arrays.asList(args));
+        }
+
+        /**
+         * 后置通知：目标方法执行完后被调用
+         */
+        @After(value = "pointCut()") // 先定义一个空方法，在空方法上使用execution表达式，然后在此处value值引用空方法名称
+        public void afterAdvice() {
+            System.out.println("----- 后置通知 -----");
+        }
+
+        /**
+         * 环绕通知：可决定目标方法是否执行，什么时候执行，执行时是否需要替换参数，执行完毕是否需要替换返回值
+         *
+         * @param joinPoint 第一个参数的类型必须为 org.aspectj.lang.ProceedingJoinPoint
+         */
+        @Around(value = "pointCut()")
+        public Object aroundAdvice(ProceedingJoinPoint joinPoint) {
+            Object[] args = joinPoint.getArgs();
+            try {
+                System.out.println("----- 环绕前置通知 -----");
+                Object proceed = joinPoint.proceed(args); // 执行目标方法
+                System.out.println("----- 环绕后置通知 -----");
+                return proceed;
+            } catch (Throwable throwable) {
+                throwable.printStackTrace();
+            }
+            return null;
+        }
+
+        /**
+         * 后置返回通知：
+         *
+         * @param joinPoint 如果第一个参数类型为JoinPoint，则第二个参数代表返回值；否则，默认第一个参数为注解属性returning的值
+         * @param result    只有目标方法返回值类型与通知方法相应参数类型相同时，才执行后置返回通知；否则不执行
+         */
+        @AfterReturning(value = "pointCut()", returning = "result")
+        public void afterReturningAdvice(JoinPoint joinPoint, Object result) {
+            System.out.println("----- 后置返回通知，返回值：" + result);
+        }
+
+        /**
+         * 后置异常通知
+         *
+         * @param joinPoint
+         * @param e         只有目标方法抛出的异常类型与通知方法相应参数类型相同时，才执行后置异常通知；否则不执行
+         */
+        @AfterThrowing(value = "pointCut()", throwing = "e")
+        public void afterThrowingAdvice(JoinPoint joinPoint, Exception e) {
+            System.out.println("----- 后置异常通知 -----, " + e.toString());
+        }
+    }
+
+    /**
+     * class 02
+     */
+    @Service("myService")
+    public class MyService {
+        public boolean save(String arg) {
+            System.out.println("do insert " + arg);
+            return true;
+        }
+    }
+
+    /**
+     * class 03
+     * 切面通知(增强)执行顺序：
+     *  环绕前置通知 -> 前置通知 -> method执行 -> 环绕后置通知 -> 后置通知 -> 后置返回
+     */
+    //@RunWith(SpringJUnit4ClassRunner.class)
+    //@ContextConfiguration(locations = "classpath:applicationContext-Aop.xml")
+    public class AopTest {
+
+        @Test
+        public void testAnnotationConfigAop() {
+            ConfigurableApplicationContext context = new AnnotationConfigApplicationContext(com.autumn.learn.spring.AopTest.ConfigAopAnnotation.class);
+            MyService myService = context.getBean("myService", MyService.class);
+            myService.save("注解配置开启AOP");
+        }
+
+        @EnableAspectJAutoProxy // 开启AOP功能
+        @Configuration
+        static class ConfigAopAnnotation {
+            @Bean
+            public MyService myService() {
+                return new MyService();
+            }
+
+            @Bean
+            public MyAspectWithJavaAnnotation myAspect() {
+                return new MyAspectWithJavaAnnotation();
+            }
+        }
+
+
+        @Test
+        public void testXmlConfigAop() {
+            ConfigurableApplicationContext applicationContext = new ClassPathXmlApplicationContext(new String[]{
+                    "aop/applicationContext-Aop.xml"}, false);
+            applicationContext.refresh();
+
+            MyService myService = applicationContext.getBean("myService", MyService.class);
+            myService.save("XML配置文件开启AOP");
+        }
+    }
+    // AOP------------------------------------------------------------------------------------------------
+
+
+    // BeanLifecycle------------------------------------------------------------------------------------------------
+    /*
+    applicationContext-BeanLifecycle.xml
+
+        <bean id="beanLifecycle" class="com.autumn.learn.spring.domain.BeanLifecycle" init-method="customInit"
+          destroy-method="customDestroy"/>
+     */
+
+    /**
+     * class 01
+     * 初始化执行顺序：构造函数 -> @PostConstruct注解标注的初始化方法 -> InitializingBean.afterPropertiesSet() -> xml配置(init-method)指定的自定义方法
+     * 销毁执行顺序：@PreDestroy注解标注的销毁方法 -> DisposableBean.destroy() -> xml配置(destroy-method)指定的自定义方法
+     */
+    public class BeanLifecycle implements InitializingBean, DisposableBean {
+        private static int createCount = 0;
+
+        public BeanLifecycle() {
+            System.out.println("1 execute constructor, 第 " + (++createCount) + " 次创建 BeanLifecycle 实例对象");
+        }
+
+        @PostConstruct
+        public void initByPostConstructor() {
+            System.out.println("2.1 init By @PostConstruct.");
+        }
+
+        @Override
+        public void afterPropertiesSet() {
+            System.out.println("2.2 init by InitializingBean.afterPropertiesSet().");
+        }
+
+        public void customInit() {
+            System.out.println("2.3 invoke custom init method.");
+        }
+
+        @Override
+        public void destroy() {
+            System.out.println("3.2 destroy by DisposableBean.destroy().");
+        }
+
+        @PreDestroy
+        public void destroyByPreDestroy() {
+            System.out.println("3.1 destroy by @PreDestroy.");
+        }
+
+        public void customDestroy() {
+            System.out.println("3.3 invoke custom destroy method.");
+        }
+
+        @Override
+        public String toString() {
+            return "User@" + Integer.toHexString(hashCode());
+        }
+    }
+    // BeanLifecycle------------------------------------------------------------------------------------------------
+
+
+    // CircularReference------------------------------------------------------------------------------------------------
+    /*
+    applicationContext-CircularReference.xml
+
+    <bean id="id_C" class="com.autumn.learn.spring.domain.CC" scope="prototype">
+        <property name="c1" value="333"/>
+        <property name="c2" value="ccc"/>
+    </bean>
+
+    <bean id="id_B" class="com.autumn.learn.spring.domain.BB">
+        <property name="b1" value="bbb"/>
+        <property name="aa" ref="id_A"/>
+        <property name="cc" ref="id_C"/>
+    </bean>
+
+    <bean id="id_A" class="com.autumn.learn.spring.domain.AA">
+        <property name="a1" value="100"/>
+        <property name="bb" ref="id_B"/>
+    </bean>
+
+    <bean id="id_D" class="com.autumn.learn.spring.domain.AA.DD">
+        <property name="cc" ref="id_C"/>
+    </bean>
+     */
+
+    /**
+     * class 01
+     */
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Getter
+    @Setter
+    @ToString
+    public class AA {
+        private int a1;
+        private BB bb;
+
+        @NoArgsConstructor
+        @Getter
+        @Setter
+        class DD extends com.autumn.learn.spring.domain.AA {
+            private CC cc;
+        }
+    }
+
+    /**
+     * class 02
+     */
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Getter
+    @Setter
+    @ToString
+    public class BB {
+        private String b1;
+        private com.autumn.learn.spring.domain.AA aa;
+        private CC cc;
+    }
+
+    /**
+     * class 03
+     */
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Getter
+    @Setter
+    @ToString
+    public class CC {
+        private int c1;
+        private String c2;
+    }
+    // CircularReference------------------------------------------------------------------------------------------------
+
+
+    public class IgnoreAutowiringBeanFactoryPostProcessor implements BeanFactoryPostProcessor {
+        @Override
+        public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
+            // 在Application指明Bean属性可以通过类型自动注入时, 忽略ArrayList类型属性的自动注入
+            beanFactory.ignoreDependencyType(ArrayList.class);
+        }
+    }
+
+    public class AnnotationConfigAppTest {
+        private final static Logger LOGGER = LoggerFactory.getLogger(com.autumn.learn.spring.context.AnnotationConfigAppTest.class);
+
+        /**
+         * AnnotationMetadata、MethodMetadata获取
+         */
+        @Test
+        public void testBean_AnnotationMetadata() {
+            ConfigurableApplicationContext context =
+                    new AnnotationConfigApplicationContext(com.autumn.learn.spring.context.AnnotationConfigAppTest.ConfigBeanAnnotationMetadata.class);
+            DefaultListableBeanFactory beanFactory = (DefaultListableBeanFactory) context.getBeanFactory();
+            AnnotatedBeanDefinition definition = (AnnotatedBeanDefinition) beanFactory.getBeanDefinition("myAspect");
+            AnnotationMetadata annotationMetadata = null;
+            MethodMetadata methodMetadata = null;
+
+            annotationMetadata = definition.getMetadata();
+            methodMetadata = definition.getFactoryMethodMetadata();
+
+            System.out.println(annotationMetadata);
+            System.out.println(methodMetadata);
+        }
+
+        @Configuration
+        static class ConfigBeanAnnotationMetadata {
+
+            @Bean("myAspect")
+            public com.autumn.learn.spring.aop.MyAspectWithJavaAnnotation myAspect() {
+                return new com.autumn.learn.spring.aop.MyAspectWithJavaAnnotation();
+            }
+        }
+
+
+        /**
+         * 验证 org.springframework.beans.BeanMetadataElement.getSource() 功能
+         */
+        @Test
+        public void testFunction_getSource() {
+            ConfigurableApplicationContext context = new AnnotationConfigApplicationContext(com.autumn.learn.spring.context.AnnotationConfigAppTest.ConfigFunctionGetSource.class);
+            DefaultListableBeanFactory beanFactory = (DefaultListableBeanFactory) context.getBeanFactory();
+
+            // 情形一：手动注册一个BeanDefinition
+            BeanDefinition beanDefinitionRegistry = new RootBeanDefinition();
+            beanDefinitionRegistry.setBeanClassName(Department.class.getName());
+            beanDefinitionRegistry.setScope(BeanDefinition.SCOPE_PROTOTYPE);
+            beanFactory.registerBeanDefinition("department", beanDefinitionRegistry);
+
+            BeanDefinition beanDefinition = beanFactory.getBeanDefinition("department");
+            Object source = beanDefinition.getSource(); // null
+            LOGGER.info("手动注册的BeanDefinition，source: {}", source);
+
+            // 情形二：XML配置文件中生成的BeanDefinition
+            beanDefinition = beanFactory.getBeanDefinition("myService");
+            source = beanDefinition.getSource(); // null
+            LOGGER.info("XML配置文件中生成的BeanDefinition，source: {}", source);
+
+            // 情形三：从配置类生成的BeanDefinition
+            beanDefinition = beanFactory.getBeanDefinition("employee");
+            source = beanDefinition.getSource(); // org.springframework.core.type.StandardMethodMetadata@XXX
+            LOGGER.info("配置类生成的BeanDefinition，source: {}", source);
+        }
+
+        @ImportResource({"classpath:aop/applicationContext-Aop.xml"})
+        @Configuration
+        static class ConfigFunctionGetSource {
+
+            @Bean(name = "employee")
+            public Employee createEmployee() {
+                return new Employee();
+            }
+        }
+
+
+        /**
+         * 注解@Configuration的 proxyBeanMethods 属性功能
+         * proxyBeanMethods为 true|false 时，注意对比department和employee.getDepartment()两个实例的hashcode
+         */
+        @Test
+        public void testAnnotationProperty_proxyBeanMethods() {
+            ConfigurableApplicationContext context =
+                    new AnnotationConfigApplicationContext(com.autumn.learn.spring.context.AnnotationConfigAppTest.ConfigPropertyProxyBeanMethods.class);
+
+            LOGGER.info("** 测试@Configuration(proxyBeanMethods)属性");
+            Department department = context.getBean("department", Department.class);
+            LOGGER.info(String.valueOf(department.hashCode()));
+            Employee employee = context.getBean("employee", Employee.class);
+            LOGGER.info(String.valueOf(employee.getDepartment().hashCode()));
+        }
+
+        @Configuration(proxyBeanMethods = false)
+        static class ConfigPropertyProxyBeanMethods {
+
+            @Bean(name = "department")
+            public Department createDepartment() {
+                return new Department();
+            }
+
+            @Bean("employee")
+            public Employee createEmployee() {
+                // proxyBeanMethods = false, 每次调用createAA()方法，都返回一个新的AA实例；
+                // proxyBeanMethods = true, 每次调用createAA()方法，都返回同一个已创建的AA实例
+                Department department = createDepartment();
+                return new Employee(department);
+            }
+        }
+
+
+        /**
+         * Bean生命周期测试
+         */
+        @Test
+        public void testBeanLifeCycle() {
+            ConfigurableApplicationContext context = new AnnotationConfigApplicationContext(com.autumn.learn.spring.context.AnnotationConfigAppTest.ConfigBeanLifeCycle.class);
+            context.getBean("beanLifecycle"); // 多例bean的创建需通过调用getBean()触发
+            context.close(); // 手动调用close()方法，触发bean生命周期中的destroy方法执行（多例模式Bean不会执行destroy方法）
+        }
+
+        @Configuration
+        static class ConfigBeanLifeCycle {
+
+            @Scope(value = ConfigurableBeanFactory.SCOPE_SINGLETON) // 多例Bean的创建不会执行destroy方法; @Bean默认创建单例Bean
+            @Bean(name = "beanLifecycle", initMethod = "customInit", destroyMethod = "customDestroy")
+            public com.autumn.learn.spring.domain.BeanLifecycle beanLifecycle() {
+                return new com.autumn.learn.spring.domain.BeanLifecycle();
+            }
+        }
+    }
+
+    public class XmlAppTest {
+        private final static Logger LOGGER = LoggerFactory.getLogger(com.autumn.learn.spring.context.XmlAppTest.class);
+
+
+        /**
+         * beanFactory.ignoreDependencyType((Class<?> type)
+         * 在Application指明Bean属性可以通过类型自动注入时, 忽略type类型属性的自动注入
+         *
+         * 注意：
+         *   1、要让ignoreDependencyType()方法功能生效，需在配置文件中的beans标签设置属性default-autowire="byType"
+         */
+        @Test
+        public void testMethod_IgnoreDependencyType() {
+            ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(new String[]{"classpath" +
+                    ":applicationContext3.xml"}, false);
+
+            // 注意：在这里手动加入ApplicationContext中，无法起作用
+//        context.addBeanFactoryPostProcessor(new IgnoreAutowiringBeanFactoryPostProcessor());
+
+            context.refresh(); // 手动刷新ApplicationContext容器
+
+            Department department = context.getBean("department", Department.class);
+            LOGGER.info(department.toString());
+        }
+
+
+        /**
+         * 循环依赖测试
+         */
+        @Test
+        public void testBeanCircularReference() {
+            ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(new String[]{"classpath" +
+                    ":bean/applicationContext-CircularReference.xml"}, false);
+            context.refresh(); // 手动刷新ApplicationContext容器
+        }
+
+        /**
+         * 验证三个依赖Map分别存储的内容:
+         * 1. Map<String, Set<String>> containedBeanMap = new ConcurrentHashMap<>(16);
+         * 2. Map<String, Set<String>> dependentBeanMap = new ConcurrentHashMap<>(64); 存储被依赖的BeanName(类外部Bean)
+         * 3. Map<String, Set<String>> dependenciesForBeanMap = new ConcurrentHashMap<>(64); 存储类内部依赖的BeanName(类内部属性Bean)
+         */
+        @Test
+        public void testBeanDependentMap() {
+            ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(new String[]{"classpath" +
+                    ":bean/applicationContext-CircularReference.xml"});
+
+            // 先获取到Context中的BeanFactory，因context.close()调用后会置BeanFactory为null
+            DefaultListableBeanFactory beanFactory = (DefaultListableBeanFactory) context.getBeanFactory();
+
+            String[] aDependencies = beanFactory.getDependenciesForBean("id_A"); // ["id_B"]
+            String[] aDependents = beanFactory.getDependentBeans("id_A"); // ["id_B", "id_D"]
+
+            String[] bDependencies = beanFactory.getDependenciesForBean("id_B"); // ["id_A", "id_C"]
+            String[] bDependents = beanFactory.getDependentBeans("id_B"); // ["id_A"]
+
+            String[] cDependencies = beanFactory.getDependenciesForBean("id_C"); // []
+            String[] cDependents = beanFactory.getDependentBeans("id_C"); // ["id_B", "id_D"]
+
+            System.out.println();
+        }
+
+        /**
+         * Bean生命周期:
+         * 第一步：实例化对象
+         *   调用构造函数实例化一个Bean。
+         * 第二步：为Bean的属性赋值
+         *   调用populateBean(...)为相关属性赋值 -> 调用Bean实现的各种XXXAware接口的setXXX()方法为相关属性赋值
+         * 第三步：调用BeanPostProcessor.postProcessBeforeInitialization()
+         * 第四步：执行Bean的初始化方法
+         *   调用@PostConstruct标注的初始化方法 -> 调用InitializingBean.afterPropertiesSet() -> 调用自定义指定的初始化方法
+         * 第五步: 调用BeanPostProcessor.postProcessAfterInitialization()
+         * ...
+         * Bean一系列的方法调用，直到这个Bean不再需要使用
+         * ...
+         * 第六步：执行Bean的销毁方法
+         *   调用@PostConstruct标注的销毁方法 -> 调用DisposableBean.destroy() -> 调用自定义指定的销毁方法
+         *
+         */
+        @Test
+        public void testBeanLifeCycle() {
+            ConfigurableApplicationContext context = new ClassPathXmlApplicationContext("classpath:" +
+                    "bean/applicationContext-BeanLifecycle.xml");
+
+//        context.getBean("beanLifecycle"); // 多例bean的创建需通过调用getBean()触发
+
+            context.close(); // 手动调用close()方法，触发bean生命周期中的destroy方法执行（多例模式Bean不会执行destroy方法）
+        }
+    }
+}
+
+
+public class BeanWrapperTest {
+
+    @Test
+    public void testPropertyValue() {
+        ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(new String[]{"classpath" +
+                ":applicationContext2.xml"}, false);
+        context.refresh(); // 手动刷新ApplicationContext容器
+
+        ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+        BeanDefinition beanDefinition = beanFactory.getBeanDefinition("id_A");
+
+        context.getBean("id_A");
+    }
+
+    @Test
+    public void testGetNestedPropertySeparatorIndex() {
+        String propertyPath = "scores[my.key].value";
+
+        int firstPropertySeparatorIndex = getNestedPropertySeparatorIndex(propertyPath, false);
+        System.out.println(firstPropertySeparatorIndex + " " + propertyPath.substring(0, firstPropertySeparatorIndex));
+
+        int lastPropertySeparatorIndex = PropertyAccessorUtils.getLastNestedPropertySeparatorIndex(propertyPath);
+        System.out.println(lastPropertySeparatorIndex + " " + propertyPath.substring(lastPropertySeparatorIndex + 1));
+    }
+
+    /**
+     * 获取propertyPath(内嵌属性)中第一个(或最后一个)属性分割符(.)的index，不考虑数组和集合key中的分割符(.)
+     * 如map[my.key].name:
+     *  "my.key"为key
+     *  "name"为map[my.key]的内嵌属性名, name属性分割符(.)的index为6
+     */
+    public int getNestedPropertySeparatorIndex(String propertyPath, boolean last) {
+        boolean inKey = false;
+        int length = propertyPath.length();
+        int i = (last ? length - 1 : 0);
+        while (last ? i >= 0 : i < length) {
+            switch (propertyPath.charAt(i)) {
+                case '[':
+                case ']':
+                    inKey = !inKey;
+                    break;
+                case '.':
+                    if (!inKey) {
+                        return i;
+                    }
+            }
+            if (last) {
+                i--;
+            } else {
+                i++;
+            }
+        }
+        return -1;
+    }
+}
+
+
+public class PropertyTokenHolderTest {
+    public static final String PROPERTY_KEY_PREFIX="[";
+
+    public static final String PROPERTY_KEY_SUFFIX="]";
+
+    public static void main(String[] args) {
+//        String propertyName = "users[2][1].name";
+        String propertyName = "users[2][1].name";
+        PropertyTokenHolderTest propertyTokenHolder = new PropertyTokenHolderTest().getPropertyNameTokens(propertyName);
+        System.out.println(JSONObject.toJSON(propertyTokenHolder));
+    }
+
+    public String actualName; // 如果属性是一个数组/集合，则为该集合的名称，否则直接为属性名。如属性名为users[1].name，对应的canonicalName为users
+
+    public String canonicalName; // 如果属性是一个数组/集合，数组/集合中的具体元素名称，否则直接为属性名。如属性名为users[1].name，对应的canonicalName为users[1]
+
+    @Nullable
+    public String[] keys;
+
+
+    public PropertyTokenHolderTest() {
+    }
+
+    public PropertyTokenHolderTest(String name) {
+        this.actualName = name;
+        this.canonicalName = name;
+    }
+
+
+    /**
+     * 给定一个属性名，返回一个PropertyTokenHolder对象
+     * 如：
+     * name    返回：{"actualName":"name","canonicalName":"name"}
+     * user.name   返回：{"actualName":"user.name","canonicalName":"user.name"}
+     * users[1].name    返回：{"actualName":"users","keys":["1"],"canonicalName":"users[1]"}
+     *
+     * @param propertyName
+     * @return
+     */
+    private PropertyTokenHolderTest getPropertyNameTokens(String propertyName) {
+        String actualName = null;
+        List<String> keys = new ArrayList<>(2);
+        int searchIndex = 0;
+        while (searchIndex != -1) {
+            int keyStart = propertyName.indexOf(PROPERTY_KEY_PREFIX, searchIndex);
+            searchIndex = -1;
+            if (keyStart != -1) {
+                int keyEnd = getPropertyNameKeyEnd(propertyName, keyStart + PROPERTY_KEY_PREFIX.length());
+                if (keyEnd != -1) {
+                    if (actualName == null) {
+                        actualName = propertyName.substring(0, keyStart);
+                    }
+                    String key = propertyName.substring(keyStart + PROPERTY_KEY_PREFIX.length(), keyEnd);
+                    if (key.length() > 1 && (key.startsWith("'") && key.endsWith("'")) ||
+                            (key.startsWith("\"") && key.endsWith("\""))) {
+                        key = key.substring(1, key.length() - 1);
+                    }
+                    keys.add(key);
+                    searchIndex = keyEnd + PROPERTY_KEY_SUFFIX.length();
+                }
+            }
+        }
+        PropertyTokenHolderTest tokens = new PropertyTokenHolderTest(actualName != null ? actualName :
+                propertyName);
+        if (!keys.isEmpty()) {
+            tokens.canonicalName += PROPERTY_KEY_PREFIX +
+                    StringUtils.collectionToDelimitedString(keys,
+                            PROPERTY_KEY_SUFFIX + PROPERTY_KEY_PREFIX) +
+                    PROPERTY_KEY_SUFFIX;
+            tokens.keys = StringUtils.toStringArray(keys);
+        }
+        return tokens;
+    }
+
+
+    private int getPropertyNameKeyEnd(String propertyName, int startIndex) {
+        int unclosedPrefixes = 0;
+        int length = propertyName.length();
+        for (int i = startIndex; i < length; i++) {
+            switch (propertyName.charAt(i)) {
+                case PropertyAccessor.PROPERTY_KEY_PREFIX_CHAR:
+                    // The property name contains opening prefix(es)...
+                    unclosedPrefixes++;
+                    break;
+                case PropertyAccessor.PROPERTY_KEY_SUFFIX_CHAR:
+                    if (unclosedPrefixes == 0) {
+                        // No unclosed prefix(es) in the property name (left) ->
+                        // this is the suffix we are looking for.
+                        return i;
+                    } else {
+                        // This suffix does not close the initial prefix but rather
+                        // just one that occurred within the property name.
+                        unclosedPrefixes--;
+                    }
+                    break;
+            }
+        }
+        return -1;
+    }
+}
+
+
+public class ResourcePatternResolverTest {
+
+    @Test
+    public void test01() {
+        System.out.println(determineRootDir("classpath*:a/b/c*/d/e.xml"));
+    }
+
+    protected String determineRootDir(String location) {
+        int prefixEnd = location.indexOf(':') + 1;
+        int rootDirEnd = location.length();
+        while (rootDirEnd > prefixEnd && new AntPathMatcher().isPattern(location.substring(prefixEnd, rootDirEnd))) {
+            rootDirEnd = location.lastIndexOf('/', rootDirEnd - 2) + 1;
+        }
+        if (rootDirEnd == 0) {
+            rootDirEnd = prefixEnd;
+        }
+        return location.substring(0, rootDirEnd);
+    }
+}
