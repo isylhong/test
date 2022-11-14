@@ -1,0 +1,897 @@
+public class IOTest {
+
+    /**
+     * 使用 new File("xxx")获取文件系统中的资源
+     */
+    @Test
+    public void testFileSystemResource() {
+        try {
+            /*
+            File参数：
+            parent(String): 文件(或目录)的父路径，可以是绝对路径，也可以是相对于项目根路径的相对路径
+            child(String): 文件(或目录)相对于第一个参数parent的相对路径
+             */
+            String fileName = "out/input.txt";
+            File file = new File("src/test/java/com/autumn/learn/java8/io", fileName);
+            FileInputStream fis = new FileInputStream(file.getCanonicalPath());
+            byte[] bytes = new byte[1024];
+            int len;
+            while ((len = fis.read(bytes)) != -1) {
+                System.out.println(new String(bytes, StandardCharsets.UTF_8));
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 三种方法获取ClassPath路径中的资源：
+     * 1. XXXClass.getResource("fileName")
+     *      fileName不以/开头，获取相对于XXXClass路径下的资源。
+     * 2. XXXClass.getResource("/fileName")
+     *      fileName以/开头，获取相对于所有java编译文件*.class根路径下的资源。
+     * 3. ClassLoader.getResource("fileName")
+     *      fileName以/开头，获取相对于*.class根路径下的资源。
+     */
+    @Test
+    public void testClassPathResource() {
+        System.out.println(TempTest.class.getResource("")); // 以TempTest.java编译后的TempTest.class文件(注意，不是.java文件)
+        System.out.println(TempTest.class.getResource("/")); // 以所有class文件根路径所在目录的相对路径获取Resource
+
+        System.out.println();
+        ClassLoader classLoader = TempTest.class.getClassLoader();
+        System.out.println(classLoader.getResource(""));  // 以class文件根路径所在目录的相对路径获取Resource，同Class.getResource("/"))
+        System.out.println(classLoader.getResource("/")); // null
+    }
+}
+
+
+public class RedirectTest {
+
+    public static void main(String[] args) throws InterruptedException, FileNotFoundException {
+        System.out.println("aaa");
+        new RedirectTest().testRedirectInputStream();
+    }
+
+    /**
+     * 输出重定向
+     */
+    @Test
+    public void testRedirectOutputStream() {
+        String targetOutPut = "./output.txt";
+
+        FileOutputStream fos = null;
+        try {
+            fos = new FileOutputStream(targetOutPut);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        assert fos != null;
+        PrintStream ps = new PrintStream(fos); // 重定向标准输出
+
+        System.setOut(ps);
+        System.out.println("输出重定向");
+
+        new Thread(() -> System.out.println("1111111")).start(); // 子线程共享父线程中的标准输入|输出
+    }
+
+    /**
+     * 输入重定向
+     */
+    @Test
+    public void testRedirectInputStream() {
+        String targetOutPut = "./input.txt";
+
+        InputStream STDIN = System.in; // 先保存默认的标准输入
+
+        FileInputStream fos = null;
+        try {
+            fos = new FileInputStream(targetOutPut);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        System.setIn(fos); // 重定向标准输入
+
+        Scanner sc = new Scanner(System.in);
+        while (sc.hasNext()) {
+            System.out.println(sc.next());
+        }
+
+        System.setIn(STDIN); // 将System.in重新指回默认标准输入
+        Scanner sc2 = new Scanner(System.in);
+        String next = sc2.next(); //
+        System.out.println(next);
+    }
+}
+
+
+public class SerializeTest {
+
+    @Test
+    public void testSerialize() throws IOException, ClassNotFoundException {
+        MySerial mySerial = new MySerial("1");
+        MySerial.str = "str1";
+        mySerial.setPwd("123456");
+        mySerial.setName("张三");
+        mySerial.setAge(20);
+        mySerial.setAddress("深圳");
+        File file = new File("./stu.txt");
+        FileOutputStream fos = new FileOutputStream(file);
+        ObjectOutputStream oos = new ObjectOutputStream(fos);
+        oos.writeObject(mySerial);
+        oos.close();
+    }
+
+
+    @Test
+    public void testDeserialize() throws IOException, ClassNotFoundException {
+        MySerial.str="str2"; // 反序列化前修改静态变量str的值，证明反序列化后类中static型变量str的值为当前JVM中对应static变量的值。实际static修饰的变量不会被序列化
+        File file = new File("./stu.txt");
+        FileInputStream fis = new FileInputStream(file);
+        ObjectInputStream ois = new ObjectInputStream(fis);
+        Object object = ois.readObject();
+        ois.close();
+        MySerial mySerial = (MySerial) object;
+        System.out.println(mySerial);
+    }
+
+
+    /**
+     * 序列化与反序列化
+     */
+    @Test
+    public void testSerializeAndDeserialize() throws IOException, ClassNotFoundException {
+        // 序列化
+        MySerial mySerial = new MySerial("1");
+        MySerial.str = "str1";
+        mySerial.setPwd("123456");
+        mySerial.setName("张三");
+        mySerial.setAge(20);
+        mySerial.setAddress("深圳");
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(bos);
+        oos.writeObject(mySerial);
+        oos.close();
+
+        // 反序列化
+        ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+        ObjectInputStream ois = new ObjectInputStream(bis);
+        Object object = ois.readObject();
+        System.out.println(object.toString());
+        ois.close();
+    }
+}
+
+
+/**
+ * 注解继承测试
+ */
+public class AnnotationInheritedTest {
+
+    @Inherited // 声明注解具有继承性
+    @Target(value = ElementType.TYPE)
+    @Retention(value = RetentionPolicy.RUNTIME)
+    @interface AInherited {
+        String value() default "";
+    }
+
+    @Inherited // 声明注解具有继承性
+    @Target(value = ElementType.TYPE)
+    @Retention(value = RetentionPolicy.RUNTIME)
+    @interface BInherited {
+        String value() default "";
+    }
+
+    // 未声明注解具有继承性
+    @Target(value = ElementType.TYPE)
+    @Retention(value = RetentionPolicy.RUNTIME)
+    @interface CInherited {
+        String value() default "";
+    }
+
+    @AInherited("父类的AInherited")
+    @BInherited("父类的BInherited")
+    @CInherited("父类的CInherited")
+    class SuperClass {
+    }
+
+    @BInherited("子类的BInherited")
+    class ChildClass extends SuperClass {
+    }
+
+    public static void main(String[] args) {
+        Annotation[] annotations = ChildClass.class.getAnnotations();
+        System.out.println(Arrays.toString(annotations));
+        // [@com.autumn.java8.annotation.AnnotationInheritedTest$AInherited(value=父类的AInherited),
+        //  @com.autumn.java8.annotation.AnnotationInheritedTest$BInherited(value=子类的BInherited)]
+    }
+}
+
+
+/**
+ * 适配器模式
+ */
+public class AdapterTest {
+    @Test
+    public void test01() {
+        IPassportForThird adapter = new PassportForThirdAdapter();
+        ResultMsg resultMsg = adapter.loginForQQ("666666");
+        System.out.println(resultMsg);
+    }
+
+    // old code--------------------------------------------------------------------
+
+    /**
+     * class 01
+     * 遵循开闭原则，老代码我们不修改。开启代码重构之路，创建Member类
+     */
+    @Data
+    public class Member {
+        private String username;
+        private String password;
+        private String mid;
+        private String info;
+    }
+
+    /**
+     * class 02
+     * 统一登陆结果ResultMsg类
+     */
+    @Data
+    public class ResultMsg {
+        private int code;
+        private String msg;
+        private Object data;
+
+        public ResultMsg(int code, String msg, Object data) {
+            this.code = code;
+            this.msg = msg;
+            this.data = data;
+        }
+    }
+
+    public class PassportService {
+
+        /**
+         * class 03
+         * 注册方法
+         */
+        public ResultMsg register(String username, String password) {
+            return new ResultMsg(200, "注册成功", new Member());
+        }
+
+        /**
+         * 登录方法
+         */
+        public ResultMsg login(String username, String password) {
+            return new ResultMsg(200, "登录成功", null);
+        }
+    }
+    // old code--------------------------------------------------------------------
+
+
+    // refactor code--------------------------------------------------------------------
+
+    /**
+     * class 01
+     * 根据不同登录方式，创建不同登录Adaptor。首先，创建LoginAdapter接口
+     */
+    public interface ILoginAdapter {
+        boolean support(Object object);
+
+        ResultMsg login(String id, Object adapter);
+    }
+
+    /**
+     * class 02
+     * 运行稳定的代码不改动。创建ITarget角色IPassportForThird接口
+     */
+    public interface IPassportForThird {
+        public ResultMsg loginForQQ(String openId);
+
+        public ResultMsg loginForWechat(String openId);
+
+        public ResultMsg loginForToken(String token);
+
+        public ResultMsg loginForTelephone(String phone, String code);
+    }
+
+    /**
+     * class 03
+     */
+    public abstract class AbstractAdapter extends PassportService implements ILoginAdapter {
+    }
+
+    /**
+     * class 04
+     * QQ登录
+     */
+    public class LoginForQQAdapter extends AbstractAdapter {
+        @Override
+        public boolean support(Object adapter) {
+            return adapter instanceof LoginForQQAdapter;
+        }
+
+        @Override
+        public ResultMsg login(String id, Object adapter) {
+            if (!support(adapter)) {
+                return null;
+            }
+            //accesseToken
+            //time
+            return super.login(id, null);
+        }
+    }
+
+    /**
+     * class 05
+     * 手机登录
+     */
+    public class LoginForTelAdapter extends AbstractAdapter {
+        @Override
+        public boolean support(Object adapter) {
+            return adapter instanceof LoginForTelAdapter;
+        }
+
+        @Override
+        public ResultMsg login(String id, Object adapter) {
+            return super.login(id, null);
+        }
+    }
+
+    /**
+     * class 06
+     * Token登录
+     */
+    public class LoginForTokenAdapter extends AbstractAdapter {
+        @Override
+        public boolean support(Object adapter) {
+            return adapter instanceof LoginForTokenAdapter;
+        }
+
+        @Override
+        public ResultMsg login(String id, Object adapter) {
+            return super.login(id, null);
+        }
+    }
+
+    /**
+     * class 07
+     * 微信登录
+     */
+    public class LoginForWechatAdapter extends AbstractAdapter {
+        @Override
+        public boolean support(Object adapter) {
+            return adapter instanceof LoginForWechatAdapter;
+        }
+
+        @Override
+        public ResultMsg login(String id, Object adapter) {
+            return super.login(id, null);
+        }
+    }
+
+    /**
+     * class 08
+     */
+    public class PassportForThirdAdapter implements IPassportForThird {
+        // 简单工厂模式
+        public ResultMsg loginForQQ(String openId) {
+            return processLogin(openId, LoginForQQAdapter.class);
+        }
+
+        public ResultMsg loginForWechat(String openId) {
+            return processLogin(openId, LoginForWechatAdapter.class);
+        }
+
+        public ResultMsg loginForToken(String token) {
+            return processLogin(token, LoginForTokenAdapter.class);
+        }
+
+        public ResultMsg loginForTelephone(String phone, String code) {
+            return processLogin(phone, LoginForTelAdapter.class);
+        }
+
+        private ResultMsg processLogin(String id, Class<? extends ILoginAdapter> clazz) {
+            try {
+                ILoginAdapter adapter = clazz.newInstance();
+                if (adapter.support(adapter)) {  // 使用策略模式
+                    return adapter.login(id, adapter);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+    }
+    // refactor code--------------------------------------------------------------------
+}
+
+
+/**
+ * 桥接模式
+ *
+ * 优点:
+ * 你可以创建与平台无关的类和程序。
+ * 客户端代码仅与高层抽象部分进行互动， 不会接触到平台的详细信息。
+ * 开闭原则。 你可以新增抽象部分和实现部分， 且它们之间不会相互影响。
+ * 单一职责原则。 抽象部分专注于处理高层逻辑， 实现部分处理平台细节。
+ *
+ * 缺点:
+ * 对高内聚的类使用该模式可能会让代码更加复杂。
+ *
+ * 应用场景:
+ * 拆分或重组一个具有多重功能的庞杂类 （例如能与多个数据库服务器进行交互的类），可以使用桥接模式。
+ * 如果你希望在几个独立维度上扩展一个类，可使用该模式。
+ * 如果你需要在运行时切换不同实现方法，可使用桥接模式。
+ *
+ */
+public class BridgeTest {
+    @Test
+    public void test01(){
+        Pen redPen = new RedPen(); // 红笔
+        Pen blackPen = new BlackPen(); // 黑笔
+
+        Shape circleShape = new CircleShape(redPen);
+        circleShape.drawing(); // 红笔画圆形
+
+        System.out.println();
+        Shape circleShape2 = new CircleShape(blackPen);
+        circleShape2.drawing(); // 黑笔画圆形
+
+        System.out.println();
+        Shape rectangularShape = new RectangularShape(redPen);
+        rectangularShape.drawing(); // 红笔画矩形
+
+        System.out.println();
+        Shape rectangularShape2 = new RectangularShape(blackPen);
+        rectangularShape2.drawing(); // 黑笔画矩形
+    }
+
+    /**
+     * class 01
+     * 被桥接的接口类
+     */
+    public interface Pen {
+        public void color();
+    }
+
+    /**
+     * class 02
+     */
+    public class BlackPen implements Pen {
+        @Override
+        public void color() {
+            System.out.println("黑笔");
+        }
+    }
+
+    /**
+     * class 03
+     */
+    public class RedPen implements Pen {
+        @Override
+        public void color() {
+            System.out.println("红笔");
+        }
+    }
+
+    /**
+     * class 04
+     * 桥接类
+     */
+    public abstract class Shape {
+        protected Pen pen;
+
+        public Shape(Pen pen) {
+            this.pen = pen;
+        }
+
+        public abstract void drawing();
+    }
+
+    /**
+     * class 05
+     */
+    public class CircleShape extends Shape {
+        public CircleShape(Pen pen) {
+            super(pen);
+        }
+
+        @Override
+        public void drawing() {
+            pen.color();
+            System.out.println("画圆形");
+        }
+    }
+
+    /**
+     * class 06
+     */
+    public class RectangularShape extends Shape {
+
+        public RectangularShape(Pen pen) {
+            super(pen);
+        }
+
+        @Override
+        public void drawing() {
+            pen.color();
+            System.out.println("画矩形");
+        }
+    }
+}
+
+
+/**
+ * 责任链模式
+ */
+public class ChainTest {
+    @Test
+    public void testResponsibilityChainAdvance() {
+        Study study = new Study();
+        Filter washFaceFilter = new WashFaceFilter();
+        Filter washHairFilter = new WashHairFilter();
+        Filter haveBreakfastFilter = new HaveBreakfastFilter();
+
+        FilterChain filterChain = new StudyFilterChain(study);
+        filterChain.addFilter(washFaceFilter);
+        filterChain.addFilter(washHairFilter);
+        filterChain.addFilter(haveBreakfastFilter);
+
+        filterChain.doFilter("arg0", "arg1");
+    }
+
+    /**
+     * class 01
+     */
+    public interface Filter {
+        public void doFilter(String arg0,String arg1,FilterChain filterChain);
+    }
+
+    /**
+     * class 02
+     */
+    public interface FilterChain {
+        public void doFilter(String arg0, String arg1);
+
+        public boolean addFilter(Filter filter);
+    }
+
+    /**
+     * class 03
+     */
+    public class HaveBreakfastFilter implements Filter {
+
+        @Override
+        public void doFilter(String arg0, String arg1, FilterChain filterChain) {
+            //
+            System.out.println("吃完早饭");
+
+            filterChain.doFilter(arg0, arg1);
+        }
+    }
+
+    /**
+     * class 04
+     */
+    public class WashFaceFilter implements Filter {
+
+        @Override
+        public void doFilter(String arg0, String arg1, FilterChain filterChain) {
+            //
+            System.out.println("洗完脸");
+
+            filterChain.doFilter(arg0,arg1);
+        }
+    }
+
+    /**
+     * class 05
+     */
+    public class WashHairFilter implements Filter {
+
+        @Override
+        public void doFilter(String arg0, String arg1, FilterChain filterChain) {
+            //
+            System.out.println("洗完头发");
+
+            filterChain.doFilter(arg0, arg1);
+        }
+    }
+
+    /**
+     * class 06
+     */
+    public class StudyFilterChain implements FilterChain {
+        public int pos = 0;
+        public int count = 0;
+        List<Filter> filterList = new ArrayList<>();
+        private Study study;
+
+        public StudyFilterChain() {
+
+        }
+
+        public StudyFilterChain(Study study) {
+            this.study = study;
+        }
+
+        public StudyFilterChain(List<Filter> filterList, Study study) {
+            this.filterList = filterList;
+            this.count = filterList.size();
+            this.study = study;
+        }
+
+        public void setStudy(Study study) {
+            this.study = study;
+        }
+
+        public boolean addFilter(Filter filter) {
+            boolean isAdd = this.filterList.add(filter);
+            if (isAdd){
+                this.count++;
+            }
+            return isAdd;
+        }
+
+        @Override
+        public void doFilter(String arg0, String arg1) {
+            int posNow;
+            if ((posNow = this.pos++) >= this.count) {
+                this.study.study();
+                return;
+            }
+            Filter filter = filterList.get(posNow);
+            //
+            filter.doFilter(arg0, arg1, this);
+        }
+    }
+
+    /**
+     * class 07
+     */
+    public class Study {
+        public void study(){
+            System.out.println("学习");
+        }
+    }
+}
+
+
+/**
+ * 观察者模式
+ */
+public class VisitorTest {
+    @Test
+    public void test01(){
+        TicketLobby ticketLobby = new TicketLobby();
+        ticketLobby.addTicket(new KTrainTicket());
+        ticketLobby.addTicket(new GTrainTicket());
+        Visitor studentVisitor = new StudentVisitor();
+        ticketLobby.accept(studentVisitor); // 学生票
+
+        System.out.println("----------------");
+        Visitor adultVisitor = new AdultVisitor();
+        ticketLobby.accept(adultVisitor); // 成人票
+    }
+
+    /**
+     * class 01
+     * 抽象元素（Element）：声明一个包含接受操作 accept() 的接口，其参数为访问者对象（游客）。
+     */
+    public interface Ticket {
+        public void accept(Visitor visitor);
+    }
+
+    /**
+     * class 02
+     * 高铁票
+     * 具体元素（ConcreteElement）：实现抽象元素角色提供的 accept() 操作，其方法体通常都是 visitor.visitXX(this) ，另外具体元素中可能还包含本身业务逻辑的相关操作。
+     */
+    public class GTrainTicket implements Ticket {
+        @Override
+        public void accept(Visitor visitor) {
+            visitor.buyTicket(this);
+        }
+
+        public int getGTrainTicketPrice(){
+            return 300;
+        }
+    }
+
+    /**
+     * class 03
+     * 快车表
+     * 具体元素（ConcreteElement）：实现抽象元素角色提供的 accept() 操作，其方法体通常都是 visitor.visitXX(this) ，另外具体元素中可能还包含本身业务逻辑的相关操作。
+     */
+    public class KTrainTicket implements Ticket {
+
+        @Override
+        public void accept(Visitor visitor) {
+            visitor.buyTicket(this);
+        }
+
+        public int getKTrainTicketPrice(){
+            return 100;
+        }
+    }
+
+    /**
+     * class 04
+     * 抽象的访问者（Visitor）：访问具体元素的接口，为每个具体元素类对应一个访问操作 visitXX() ，其参数为某个具体的元素。
+     */
+    public interface Visitor {
+        public void buyTicket(KTrainTicket kTrainTicket);
+
+        public void buyTicket(GTrainTicket gTrainTicket);
+    }
+
+    /**
+     * class 05
+     * 成年人
+     * 具体的访问者（ConcreteVisitor）：实现抽象访问者角色中声明的各个访问操作，确定访问者访问一个元素时该做什么。
+     */
+    public class AdultVisitor implements Visitor {
+        @Override
+        public void buyTicket(KTrainTicket kTrainTicket) {
+            float price = kTrainTicket.getKTrainTicketPrice();
+            System.out.println("成人快车票，无打折！" + price + "元");
+        }
+
+        @Override
+        public void buyTicket(GTrainTicket gTrainTicket) {
+            float price = gTrainTicket.getGTrainTicketPrice();
+            System.out.println("成人高铁票，无打折！" + price + "元");
+        }
+    }
+
+    /**
+     * class 06
+     * 学生
+     * 具体的访问者（ConcreteVisitor）：实现抽象访问者角色中声明的各个访问操作，确定访问者访问一个元素时该做什么。
+     */
+    public class StudentVisitor implements Visitor {
+        @Override
+        public void buyTicket(KTrainTicket kTrainTicket) {
+            float price = kTrainTicket.getKTrainTicketPrice() * 0.5F;
+            System.out.println("快车票，学生5折！" + price + "元");
+        }
+
+        @Override
+        public void buyTicket(GTrainTicket gTrainTicket) {
+            float price = gTrainTicket.getGTrainTicketPrice() * 0.75F;
+            System.out.println("高铁票，学生7.5折！" + price + "元");
+        }
+    }
+
+    /**
+     * class 07
+     * 售票厅
+     * 对象结构（Object Structure）：一个包含元素角色的容器，提供让访问者对象遍历容器中的所有元素的方法，通常由 List、Set、Map 等聚合类实现。本例中的动物园就可抽象成一个对象结构。
+     */
+    public class TicketLobby {
+        List<Ticket> tickets = new ArrayList<>();
+
+        public TicketLobby() {
+        }
+
+        public TicketLobby(List<Ticket> tickets) {
+            this.tickets = tickets;
+        }
+
+        public void accept(Visitor visitor) {
+            if (tickets.size() == 0) {
+                return;
+            }
+            for (Ticket ticket : tickets) {
+                ticket.accept(visitor);
+            }
+        }
+
+        public void addTicket(Ticket ticket) {
+            tickets.add(ticket);
+        }
+    }
+}
+
+
+/**
+ * 装饰器模式
+ */
+public class WrapperTest {
+    @Test
+    public void test02(){
+        Sleep sleep = new ToSleep();
+        PlayGameBeforeSleep playGameBeforeSleep = new PlayGameBeforeSleep(sleep);
+        BatheBeforeSleep batheBeforeSleep = new BatheBeforeSleep(playGameBeforeSleep);
+        BrushTeethBeforeSleep brushTeethBeforeSleep = new BrushTeethBeforeSleep(batheBeforeSleep);
+        brushTeethBeforeSleep.toSleep();
+    }
+
+    /**
+     * class 01
+     */
+    public interface Sleep {
+        void toSleep();
+    }
+
+    /**
+     * class 02
+     */
+    public abstract class AbstractSleep implements Sleep {
+        protected Sleep sleep; // 注意此次访问修饰符为 protected
+    }
+
+    /**
+     * class 03
+     */
+    public class BatheBeforeSleep extends AbstractSleep {
+
+        public BatheBeforeSleep(Sleep sleep) {
+            this.sleep = sleep;
+        }
+
+        @Override
+        public void toSleep() {
+            this.bathe(); // 功能增强
+            sleep.toSleep();
+        }
+
+        public void bathe() {
+            System.out.println("睡前洗澡。。");
+        }
+    }
+
+    /**
+     * class 04
+     */
+    public class BrushTeethBeforeSleep extends AbstractSleep {
+
+        public BrushTeethBeforeSleep(Sleep sleep) {
+            this.sleep = sleep;
+        }
+
+        @Override
+        public void toSleep() {
+            this.brushTeeth(); // 功能增强
+            sleep.toSleep();
+        }
+
+        public void brushTeeth() {
+            System.out.println("睡前刷牙。");
+        }
+    }
+
+    /**
+     * class 05
+     */
+    public class PlayGameBeforeSleep extends AbstractSleep {
+
+        public PlayGameBeforeSleep(Sleep sleep) {
+            this.sleep = sleep;
+        }
+
+        @Override
+        public void toSleep() {
+            this.playGame(); // 功能增强
+            sleep.toSleep();
+        }
+
+        public void playGame() {
+            System.out.println("睡前玩游戏。。。");
+        }
+    }
+
+    /**
+     * class 06
+     */
+    public class ToSleep extends AbstractSleep {
+
+        @Override
+        public void toSleep() {
+            System.out.println("睡觉ing。。。。");
+        }
+    }
+}
