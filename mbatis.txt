@@ -1,0 +1,423 @@
+-----------------------------mybatis-config.xml------------------------------------------
+    <!-- 相对类路径 -->
+    <properties resource="com/autumn/learn/mybatis/dataSource.properties"/>
+<!--    <properties>-->
+<!--        <property name="driver" value="com.mysql.cj.jdbc.Driver"/>-->
+<!--        <property name="url"-->
+<!--                  value="jdbc:mysql://localhost:3306/study_mybatis?useUnicode=true&amp;characterEncoding=utf8&amp;serverTimezone=UTC"/>-->
+<!--        <property name="username" value="root"/>-->
+<!--        <property name="password" value="123456"/>-->
+<!--    </properties>-->
+
+    <settings>
+        <!-- <setting name="logImpl" value="STDOUT_LOGGING"/> -->
+        <!-- 开始使用Log4j日志框架 -->
+        <setting name="logImpl" value="LOG4J"/>
+        <!-- 开启数据库字段下划线命名到驼峰名字得映射 -->
+        <setting name="mapUnderscoreToCamelCase" value="true"/>
+    </settings>
+
+    <environments default="mysql">
+        <environment id="mysql">
+            <!-- transactionManager.type也可填JdbcTransactionFactory的别名JDBC，mybatis在Configuration对象创建的时候默认添加了一系列对象的别名 -->
+            <transactionManager type="org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory"/>
+            <!-- dataSource.type也可填UnpooledDataSourceFactory的别名UNPOOLED，这里我选择不适用dataSource连接池 -->
+            <dataSource type="org.apache.ibatis.datasource.unpooled.UnpooledDataSourceFactory">
+                <!--                <property name="driver" value="com.mysql.cj.jdbc.Driver"/> -->
+                <!--                <property name="url" value="jdbc:mysql://localhost:3306/study_mybatis?useUnicode=true&amp;characterEncoding=utf8&amp;serverTimezone=UTC"/> -->
+                <!--                <property name="username" value="root"/> -->
+                <!--                <property name="password" value="123456"/>  -->
+                <property name="driver" value="${jdbc.driverClass}"/>
+                <property name="url" value="${jdbc.url}"/>
+                <property name="username" value="${jdbc.username}"/>
+                <property name="password" value="${jdbc.password}"/>
+            </dataSource>
+        </environment>
+    </environments>
+
+    <mappers>
+        <mapper resource="com/autumn/learn/mybatis/mapper/UserMapper.xml"/>
+    </mappers>
+-----------------------------mybatis-config.xml------------------------------------------
+
+
+-----------------------------mybatis-config-spring.xml------------------------------------------
+    <!-- mybatis和spring整合时，可通过<context:property-placeholder/>标签加载数据源配置文件 -->
+<!--    <properties resource="com/autumn/learn/mybatis/dataSource.properties"/>-->
+
+    <settings>
+        <!-- 开始使用Log4j日志框架 -->
+        <setting name="logImpl" value="LOG4J"/>
+        <!-- 开启数据库字段下划线命名到驼峰名字得映射 -->
+        <setting name="mapUnderscoreToCamelCase" value="true"/>
+    </settings>
+
+    <!-- mybatis和spring整合时，不需要在mybatis全局配置文件中定义Environment。即使定义了，也会在SqlSessionFactoryBean中被新建的环境对象覆盖 -->
+<!--    <environments default="mysql">
+        <environment id="mysql">
+            <transactionManager type="org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory"/>
+            <dataSource type="POOLED"/>
+        </environment>
+    </environments>-->
+-----------------------------mybatis-config-spring.xml------------------------------------------
+
+
+-----------------------------spring-dao.xml------------------------------------------
+    <!--    1、创建数据库的基本信息在 dataSource.properties 配置文件中-->
+    <!--    2、加载 dataSource.properties 配置-->
+    <context:property-placeholder location="classpath:com/autumn/learn/mybatis/dataSource.properties"/>
+
+    <!--    3.通过连接池解析配置文件 -->
+    <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource">
+        <property name="driverClassName" value="${jdbc.driverClass}"/>
+        <property name="url" value="${jdbc.url}"/>
+        <property name="username" value="${jdbc.username}"/>
+        <property name="password" value="${jdbc.password}"/>
+    </bean>
+
+    <!-- 4、配置mybatis来执行 -->
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="configLocation" value="classpath:com/autumn/learn/mybatis/mybatis-config-spring.xml"/>
+        <property name="mapperLocations" value="classpath:com/autumn/learn/mybatis/mapper/*.xml"/>
+        <property name="dataSource" ref="dataSource"/>
+        <property name="typeAliasesPackage" value="com.autumn.learn.mybatis.domain"/>
+        <!--配置分页插件 PageHelper
+            -PageHelper:针对List-->
+        <!-- 配置一个插件 -->
+<!--        <property name="plugins">
+            &lt;!&ndash; 2.分页数据正在集合中 &ndash;&gt;
+            <list>
+                &lt;!&ndash; 3.PageHelper来装载list集合中数据&ndash;&gt;
+                <bean class="com.github.pagehelper.PageInterceptor">
+                    <property name="properties">
+                        <props>
+                            &lt;!&ndash; 指定分页使用数据库方言 &ndash;&gt;
+                            <prop key="helperDialect">mysql</prop>
+                        </props>
+                    </property>
+                </bean>
+            </list>
+        </property>-->
+    </bean>
+
+    <!-- 5.配置扫描Dao接口包，动态实现Dao接口注入到spring容器中 -->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <!-- 注入sqlSessionFactory -->
+        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory"/>
+        <!-- 给出需要扫描Dao接口包 动态的实现了dao接口可以注入到spring中-->
+        <property name="basePackage" value="com.autumn.learn.mybatis.dao"/>
+    </bean>
+-----------------------------spring-dao.xml------------------------------------------
+
+
+-----------------------------spring-service.xml------------------------------------------
+    <!-- 加载业务类 -->
+    <context:component-scan base-package="com.autumn.learn.mybatis.service"/>
+
+    <!-- 开启基于注解的AOP功能，与下标签作用相同的注解@EnableAspectJAutoProxy -->
+    <aop:aspectj-autoproxy/>
+
+    <!-- 指明要使用的平台事务管理器 -->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <!-- 配置service层支持事务功能，与下标签作用相同的注解@EnableTransactionManagement -->
+    <tx:annotation-driven transaction-manager="transactionManager"/>
+-----------------------------spring-service.xml------------------------------------------
+
+
+-----------------------------OrderMapper.xml------------------------------------------
+<mapper namespace="com.autumn.learn.mybatis.dao.OrderDao">
+    <resultMap id="OrderResultMap" type="com.autumn.learn.mybatis.domain.Order">
+        <id property="id" column="id"/>
+        <result property="orderNumber" column="order_number"/>
+        <result property="total" column="total"/>
+        <result property="userNumber" column="user_number"/>
+    </resultMap>
+
+    <insert id="createOrder" useGeneratedKeys="true" keyProperty="id">
+        insert into tbl_order(order_number, total, user_number)
+        values (#{order.userNumber}, #{order.total}, #{order.userNumber})
+    </insert>
+
+    <delete id="deleteOrder">
+        delete from tbl_order
+        <where>
+            <if test="#{order.id}!='' and #{order.id}!=null">
+                id = #{order.id}
+            </if>
+            <if test="#{order.order_number}!='' and #{order.order_number}!=null">
+                OR order_number = #{order.orderNumber}
+            </if>
+            <if test="#{order.user_number}!='' and #{order.user_number}!=null">
+                OR user_number = #{order.userNumber}
+            </if>
+        </where>
+    </delete>
+
+    <select id="findOrder" resultMap="OrderResultMap">
+        select * from tbl_order
+        <where>
+            <if test="#{order.id}!='' and #{order.id}!=null">
+                id = #{order.id}
+            </if>
+            <if test="#{order.order_number}!='' and #{order.order_number}!=null">
+                OR order_number = #{order.orderNumber}
+            </if>
+            <if test="#{order.user_number}!='' and #{order.user_number}!=null">
+                OR user_number = #{order.userNumber}
+            </if>
+        </where>
+    </select>
+</mapper>
+-----------------------------OrderMapper.xml------------------------------------------
+
+
+----------------------------UserMapper.xml------------------------------------------
+<mapper namespace="com.autumn.learn.mybatis.dao.UserDao">
+    <resultMap id="UserResultMap" type="com.autumn.learn.mybatis.domain.User">
+        <id property="id" column="id"/>
+        <result property="userNumber" column="user_number"/>
+        <result property="username" column="username"/>
+    </resultMap>
+
+    <select id="findUser" resultMap="UserResultMap">
+        select *
+        from tbl_user
+        where user_number = #{user.userNumber}
+    </select>
+
+    <select id="listUser" resultMap="UserResultMap">
+        select * from tbl_user
+    </select>
+
+    <insert id="addUser" useGeneratedKeys="true" keyProperty="id">
+        insert into tbl_user(user_number, username)
+        values (#{user.userNumber}, #{user.username})
+    </insert>
+
+    <delete id="deleteUser">
+        delete
+        from tbl_user
+        where user_number = #{user.userNumber}
+    </delete>
+
+    <update id="updateUser">
+        update tbl_user
+        <set>
+            <if test="#{user.username} != null and #{user.username} != ''">
+                username = #{user.username},
+            </if>
+        </set>
+        where user_number=#{user.userNumber}
+    </update>
+</mapper>
+----------------------------UserMapper.xml------------------------------------------
+
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+@ToString
+public class User {
+    private Integer id;
+    private String userNumber;
+    private String username;
+
+    public User(String userNumber) {
+        this(userNumber,null);
+    }
+
+    public User(String userNumber, String username) {
+        this.userNumber = userNumber;
+        this.username = username;
+    }
+}
+
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+@ToString
+public class Order {
+    private Integer id;
+    private String orderNumber;
+    private double total;
+    private String userNumber;
+}
+
+public interface UserDao {
+    List<User> listUser();
+
+    User findUser(@Param("user") User user);
+
+    int addUser(@Param("user") User user);
+
+    int updateUser(@Param("user") User user);
+
+    int deleteUser(@Param("user") User user);
+}
+
+public interface OrderDao {
+    int createOrder(@Param("order") Order order);
+
+    int deleteOrder(@Param("order") Order order);
+
+    List<Order> listOrder(@Param("order") Order order);
+}
+
+
+public class MybatisTests {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MybatisTests.class);
+
+    @Test
+    public void testMybatisByCode() {
+        Configuration configuration = new Configuration();
+        configuration.setLogImpl(Log4jImpl.class); // 设置使用Log4j日志框架
+
+        // 1、配置数据源属性配置。为了方便，这里直接硬编码。也可写入配置文件，然后加载。
+        Properties properties = new Properties();
+        properties.setProperty("driver", "com.mysql.cj.jdbc.Driver");
+        properties.setProperty("url", "jdbc:mysql://localhost:3306/study_mybatis?useUnicode=true&characterEncoding" +
+                "=utf8&serverTimezone=UTC");
+        properties.setProperty("username", "root");
+        properties.setProperty("password", "123456");
+
+        // 2、创建数据源工厂对象，通过工厂对象创建DataSource
+        DataSourceFactory dsf = new PooledDataSourceFactory();
+        dsf.setProperties(properties);
+        DataSource dataSource = dsf.getDataSource();
+
+        // 3、创建事务工厂类
+        JdbcTransactionFactory jtf = new JdbcTransactionFactory();
+
+        // 4、创建设置Environment对象
+        Environment.Builder builder = new Environment.Builder("mysql"); // 自定义id
+        Environment environment = builder.dataSource(dataSource).transactionFactory(jtf).build();
+        configuration.setEnvironment(environment);
+
+        // 5. 解析XXXMapper.xml配置文件，有两种方式
+        //    方法一： 在代码中通过XMLMapperBuilder对象，指定解析某个XXXMapper.xml映射文件
+        //    方法二： 在mybatis全局配置文件的<mappers><mapper/></mappers>标签里指定映射文件
+        URL url = getClass().getResource("./mapper/UserMapper.xml"); // 方法一：在代码中指定解析某个配置文件
+        assert url != null;
+        XMLMapperBuilder xmlMapperBuilder = null;
+        try {
+            xmlMapperBuilder = new XMLMapperBuilder(url.openStream(), configuration,
+                    url.getPath(), configuration.getSqlFragments());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        assert xmlMapperBuilder != null;
+        xmlMapperBuilder.parse(); // 执行Mapper映射文件解析
+
+        // 6. 构建者模式：创建一个SqlSessionFactory对象
+        SqlSessionFactoryBuilder factoryBuilder = new SqlSessionFactoryBuilder();
+        SqlSessionFactory sqlSessionFactory = factoryBuilder.build(configuration);
+
+        // 7. 抽象工厂模式：通过SqlSessionFactory创建一个SqlSession实现对象
+        SqlSession sqlSession = sqlSessionFactory.openSession(false);
+
+        // 8. 获取XXXDao接口代理对象，执行相关操作
+        UserDao userMapper = sqlSession.getMapper(UserDao.class);
+        userMapper.addUser(new User("202207", "tom"));
+
+        // 9. 提交事务，参数决定是否强制提交事务。
+        // 强制提交事务是session一定会提交事务。非强制提交事务则会根据当前操作是否更新数据库中数据来决定session是否提交事务。
+        sqlSession.commit(true);
+    }
+
+    @Test
+    public void testMybatisByConfigFile() throws IOException {
+        // 1. 读取mybatis配置文件
+        InputStream cis = this.getClass().getResourceAsStream("mybatis-config.xml");
+        XMLConfigBuilder xmlConfigBuilder = new XMLConfigBuilder(cis);
+
+        // 2. 解析配置文件，获取全局配置对象
+        Configuration configuration = xmlConfigBuilder.parse();
+
+        // 3. 解析XXXMapper.xml配置文件，有两种方式
+        //    方法一： 在代码中通过XMLMapperBuilder对象，指定解析某个XXXMapper.xml映射文件
+        //    方法二： 在mybatis全局配置文件的<mappers><mapper/></mappers>标签里指定映射文件
+        // 这里直接通过方法二在配置文件中配置
+
+        // 4. 构建者模式：创建SqlSessionFactory构建者对象
+        SqlSessionFactoryBuilder factoryBuilder = new SqlSessionFactoryBuilder();
+        // 通过构建者对象创建一个SqlSessionFactory实例对象
+        SqlSessionFactory sqlSessionFactory = factoryBuilder.build(configuration);
+
+        // 5. 抽象工厂模式：通过SqlSessionFactory创建一个SqlSession实现对象
+        SqlSession sqlSession = sqlSessionFactory.openSession(false);
+
+        // 6. 获取XXXDao接口代理对象，执行相关操作
+        UserDao userMapper = sqlSession.getMapper(UserDao.class);
+        userMapper.addUser(new User("202206", "lucy"));
+
+        // 7. 提交事务，参数决定是否强制提交事务。
+        // 强制提交事务是一定会提交事务。非强制提交事务则会根据当前操作是否更新数据库中数据来决定是否提交事务。
+        sqlSession.commit(true);
+    }
+
+    @Test
+    public void test01() {
+        Type rawType = new StringTypeHandler().getRawType();
+        LOGGER.info(rawType.toString());
+    }
+}
+
+
+public class SpringMybatisTests {
+
+    @Test
+    public void testCreateOrder() {
+        Order order = new Order();
+        order.setOrderNumber("20220101");
+        order.setTotal(99.99D);
+        order.setUserNumber("202200");
+        ApplicationContext context = new ClassPathXmlApplicationContext("classpath:com/autumn/learn" +
+                "/mybatis/applicationContext.xml");
+        OrderService orderService = context.getBean("orderService", OrderService.class);
+        orderService.createOrder(order);
+    }
+
+    /**
+     * 事务AOP测试
+     */
+    @Test
+    public void testTransaction() {
+        ApplicationContext context = new ClassPathXmlApplicationContext("classpath:com/autumn/learn" +
+                "/mybatis/applicationContext.xml");
+        UserService userService = context.getBean("userService", UserService.class);
+        User user = new User("202201");
+        user.setUsername("张三-transaction");
+        try {
+            int i = userService.updateUser(user);
+            System.out.println("更新 " + i + " 个用户信息");
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("用户信息更新失败");
+        }
+    }
+
+    @Test
+    public void testInsert() {
+        User user = new User("202202", "李四");
+
+        ApplicationContext context = new ClassPathXmlApplicationContext("classpath:com/autumn/learn" +
+                "/mybatis/applicationContext.xml");
+        UserService userService = context.getBean("userService", UserService.class);
+        int i = userService.addUser(user);
+        System.out.println("新增 " + i + " 个用户");
+    }
+
+    @Test
+    public void testSelect() {
+        ApplicationContext context = new ClassPathXmlApplicationContext("classpath:com/autumn/learn" +
+                "/mybatis/applicationContext.xml");
+        UserService userService = context.getBean("userService", UserService.class);
+        User user = new User("202201");
+        User result = userService.findUser(user);
+        System.out.println(result);
+    }
+}
